@@ -5,3 +5,4 @@
 - 症状：`.gitignore` 中写入 `ariamx` 会把源码目录 `cmd/ariamx/` 一并忽略。原因：无斜杠的 gitignore 规则会匹配任意层级同名文件或目录。预防：忽略根目录二进制时使用 `/ariamx`。
 - 症状：冒烟验证中设置 `ARIAMX_ADMIN_PASSWORD=admin` 后仍无法登录。原因：`ARIAMX_ADMIN_PASSWORD` 只在配置文件首次创建时生效，已存在配置不会覆盖密码。预防：认证相关冒烟测试使用全新的 `ARIAMX_CONFIG` 路径。
 - 症状：Vite 开发环境打开页面后 `/api` 请求会打到前端端口。原因：开发模式没有把 `/api` 转发给 Go 后端。预防：`vite.config.ts` 中配置 `/api` 代理到本地 Go 服务端口，并在 README 记录 dev 启动顺序。
+- 症状：aria2 设置页只有裸 `key=value`，用户难以对应 AriaNg 的设置入口。原因：只读取了 `aria2.getGlobalOption`，没有维护 AriaNg 的分类和中文文案元数据。预防：全局选项页保留 AriaNg 的基本、HTTP/FTP/SFTP、HTTP、FTP/SFTP、BitTorrent、Metalink、RPC、高级分组，并为常用项提供中文名称、说明、只读和枚举信息。
