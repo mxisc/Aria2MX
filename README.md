@@ -1,93 +1,62 @@
 # AriaMX
 
+带认证功能的 aria2 Web 面板。后端使用 Go 标准库，前端使用 Vue 3 + TypeScript，构建后的前端资源会嵌入 Go 二进制。
 
+## 功能
 
-## Getting started
+- 登录认证和服务端 Cookie 会话
+- aria2 JSON-RPC 后端代理，RPC Secret 不暴露到浏览器
+- 下载总览、任务分类、搜索、排序、任务详情
+- 任务暂停、强制暂停、继续、移除、清理结果、队列置顶/置底
+- 全局暂停、全局继续、清理下载结果、保存 aria2 session
+- URL、磁力链接、种子文件创建任务
+- 新建任务高级参数：目录、输出文件名、连接数、分片数、限速、Header、暂停创建、BT 做种参数
+- 任务详情标签页：概览、文件、选项、Peer、Server、Tracker
+- BT 多文件选择，单任务选项查看和修改
+- aria2 全局选项查看和修改
+- aria2 RPC 地址、Secret、刷新间隔、默认下载目录和面板密码设置
+- 单二进制部署：`dist/ariamx`
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 开发
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+```bash
+pnpm install
+ARIAMX_ADDR=127.0.0.1:18081 ARIAMX_CONFIG=ariamx.json go run ./cmd/ariamx
+pnpm run dev
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/mxisc/ariamx.git
-git branch -M main
-git push -uf origin main
+
+开发模式下 Vite 会把 `/api` 代理到 `http://127.0.0.1:18081`。如果默认端口被占用，Vite 会自动切换到下一个可用端口。
+
+## 构建
+
+```bash
+pnpm run build:all
 ```
 
-## Integrate with your tools
+构建产物：
 
-* [Set up project integrations](https://gitlab.com/mxisc/ariamx/-/settings/integrations)
+```text
+dist/ariamx
+```
 
-## Collaborate with your team
+## 运行
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+ARIAMX_ADDR=:8080 \
+ARIAMX_CONFIG=ariamx.json \
+ARIAMX_ADMIN_PASSWORD='change-me' \
+ARIAMX_ARIA2_RPC='http://127.0.0.1:6800/jsonrpc' \
+ARIAMX_ARIA2_SECRET='' \
+./dist/ariamx
+```
 
-## Test and Deploy
+首次启动会创建 `ARIAMX_CONFIG` 指定的配置文件。默认用户名是 `admin`；建议首次启动显式设置 `ARIAMX_ADMIN_PASSWORD`。
 
-Use the built-in continuous integration in GitLab.
+## 验证
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```bash
+pnpm run lint
+pnpm run check
+go test ./...
+pnpm run build:all
+```
