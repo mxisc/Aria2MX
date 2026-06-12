@@ -293,6 +293,20 @@ button:disabled {
   gap: 14px;
 }
 
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 78px;
+  padding: 0 6px;
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
 .topbar {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -340,11 +354,45 @@ button:disabled {
   gap: 14px;
 }
 
+.single-page {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.overview-page,
+.tasks-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  gap: 14px;
+}
+
+.overview-page {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.tasks-page {
+  grid-template-rows: minmax(260px, 0.96fr) minmax(260px, 1.04fr);
+}
+
+.overview-actions,
+.recent-panel {
+  min-height: 0;
+}
+
+.recent-panel .task-list {
+  height: calc(100% - 54px);
+}
+
 .panel {
   min-height: 0;
   padding: 18px;
   overflow: hidden;
   border-radius: var(--radius);
+}
+
+.single-page > .panel {
+  height: 100%;
 }
 
 .section-title,
