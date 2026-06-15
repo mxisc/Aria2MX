@@ -17,11 +17,14 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	app := server.New(server.Options{
+	app, err := server.New(server.Options{
 		ConfigPath: cfgPath,
 		Config:     cfg,
 		Assets:     web.Assets(),
 	})
+	if err != nil {
+		log.Fatalf("start server: %v", err)
+	}
 
 	addr := getenv("ARIAMX_ADDR", ":8080")
 	srv := &http.Server{

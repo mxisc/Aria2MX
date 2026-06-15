@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from './api'
+import { applyTheme } from './theme'
 
 const router = useRouter()
 const ready = ref(false)
@@ -11,9 +12,11 @@ onMounted(async () => {
   try {
     await api.me()
     authenticated.value = true
+    await loadTheme()
     if (router.currentRoute.value.path === '/login') await router.replace('/')
   } catch {
     authenticated.value = false
+    applyTheme('design')
     await router.replace('/login')
   } finally {
     ready.value = true
@@ -22,12 +25,23 @@ onMounted(async () => {
 
 async function onAuthenticated() {
   authenticated.value = true
+  await loadTheme()
   await router.replace('/')
 }
 
 async function onLoggedOut() {
   authenticated.value = false
+  applyTheme('design')
   await router.replace('/login')
+}
+
+async function loadTheme() {
+  try {
+    const config = await api.getConfig()
+    applyTheme(config.theme)
+  } catch {
+    applyTheme('design')
+  }
 }
 </script>
 

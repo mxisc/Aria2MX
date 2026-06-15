@@ -8,7 +8,7 @@ import MetricCard from '@/components/MetricCard.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 import TaskList from '@/components/TaskList.vue'
-import type { Aria2Task, GlobalStat, TaskBucket } from '@/types'
+import type { AppAbout, Aria2Task, GlobalStat, TaskBucket } from '@/types'
 import { percent, speed, taskName } from '@/utils/format'
 
 const emit = defineEmits<{ loggedOut: [] }>()
@@ -23,9 +23,25 @@ const activePage = ref<'overview' | 'tasks' | 'add' | 'options' | 'settings'>('o
 const query = ref('')
 const sortBy = ref<'name' | 'progress' | 'speed' | 'size'>('name')
 const error = ref('')
+const about = ref<AppAbout>({ panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc' })
 let timer: number | undefined
 
+const pageMeta = {
+  overview: { title: '总览', subtitle: '查看下载速度、任务数量和常用操作。', badge: '控制台' },
+  tasks: { title: '任务列表', subtitle: '筛选、检索并管理当前下载任务。', badge: '任务列表' },
+  add: { title: '新建任务', subtitle: '提交链接、磁力或种子文件。', badge: '新建任务' },
+  options: { title: 'Aria2', subtitle: '按分类维护 aria2 全局参数。', badge: 'Aria2' },
+  settings: { title: '面板设置', subtitle: '维护 RPC、刷新间隔和面板登录配置。', badge: '面板设置' },
+} as const
+
 const allTasks = computed(() => [...active.value, ...waiting.value, ...stopped.value])
+const currentPageMeta = computed(() => pageMeta[activePage.value])
+const currentBucketCount = computed(() => {
+  if (activePage.value !== 'tasks') return String(allTasks.value.length)
+  if (bucket.value === 'waiting') return stat.value.numWaiting
+  if (bucket.value === 'stopped') return stat.value.numStopped
+  return stat.value.numActive
+})
 
 const visibleTasks = computed(() => {
   const source = bucket.value === 'waiting' ? waiting.value : bucket.value === 'stopped' ? stopped.value : active.value
@@ -46,6 +62,7 @@ const visibleTasks = computed(() => {
 
 onMounted(() => {
   refresh()
+  loadAbout()
   timer = window.setInterval(refresh, 1500)
 })
 
@@ -65,6 +82,14 @@ async function refresh() {
     error.value = ''
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '无法连接 aria2。'
+  }
+}
+
+async function loadAbout() {
+  try {
+    about.value = await api.getAbout()
+  } catch {
+    about.value = { panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc' }
   }
 }
 
@@ -104,59 +129,58 @@ async function logout() {
 <template>
   <main class="shell">
     <aside class="sidebar">
-      <div>
-        <p class="eyebrow">
-          AriaMX
-        </p>
-        <h1>控制台</h1>
+      <div class="sidebar-main">
+        <div class="sidebar-brand">
+          <strong>AriaMX</strong>
+          <span>面板 v{{ about.panelVersion || '-' }}</span>
+          <span>aria2 v{{ about.aria2Version || '-' }}</span>
+        </div>
+        <nav class="sidebar-nav">
+          <button :class="{ active: activePage === 'overview' }" @click="activePage = 'overview'">
+            <Gauge :size="16" /> 总览
+          </button>
+          <button :class="{ active: activePage === 'tasks' }" @click="activePage = 'tasks'">
+            <ListTree :size="16" /> 任务列表
+          </button>
+          <button :class="{ active: activePage === 'add' }" @click="activePage = 'add'">
+            <Plus :size="16" /> 新建任务
+          </button>
+          <button :class="{ active: activePage === 'options' }" @click="activePage = 'options'">
+            <SlidersHorizontal :size="16" /> Aria2
+          </button>
+          <button :class="{ active: activePage === 'settings' }" @click="activePage = 'settings'">
+            <Settings :size="16" /> 面板设置
+          </button>
+        </nav>
       </div>
-      <nav>
-        <button :class="{ active: activePage === 'overview' }" @click="activePage = 'overview'">
-          <Gauge :size="16" /> 总览
+      <div class="user-card">
+        <div class="user-card-head">
+          <span class="avatar">A</span>
+          <div class="user-meta">
+            <strong>admin</strong>
+            <small>管理员会话</small>
+          </div>
+        </div>
+        <button class="ghost logout" @click="logout">
+          <LogOut :size="16" /> 退出登录
         </button>
-        <button :class="{ active: activePage === 'tasks' }" @click="activePage = 'tasks'">
-          <ListTree :size="16" /> 任务
-        </button>
-        <button :class="{ active: activePage === 'add' }" @click="activePage = 'add'">
-          <Plus :size="16" /> 新建
-        </button>
-        <button :class="{ active: activePage === 'options' }" @click="activePage = 'options'">
-          <SlidersHorizontal :size="16" /> aria2 选项
-        </button>
-        <button :class="{ active: activePage === 'settings' }" @click="activePage = 'settings'">
-          <Settings :size="16" /> 设置
-        </button>
-      </nav>
-      <button class="ghost logout" @click="logout">
-        <LogOut :size="16" /> 退出
-      </button>
+      </div>
     </aside>
 
     <section class="workspace">
       <header class="page-header">
-        <div>
-          <p class="eyebrow">
-            aria2 web panel
-          </p>
-          <h2 v-if="activePage === 'overview'">
-            总览
-          </h2>
-          <h2 v-else-if="activePage === 'tasks'">
-            任务管理
-          </h2>
-          <h2 v-else-if="activePage === 'add'">
-            新建任务
-          </h2>
-          <h2 v-else-if="activePage === 'options'">
-            aria2 选项
-          </h2>
-          <h2 v-else>
-            面板设置
-          </h2>
+        <div class="page-heading">
+          <h2>{{ currentPageMeta.title }}</h2>
+          <p>{{ currentPageMeta.subtitle }}</p>
         </div>
-        <button class="ghost" @click="refresh">
-          刷新
-        </button>
+        <div class="page-header-actions">
+          <span class="badge">
+            {{ currentPageMeta.badge }} {{ currentBucketCount }}
+          </span>
+          <button class="primary" @click="refresh">
+            刷新
+          </button>
+        </div>
       </header>
 
       <div v-if="error" class="banner">

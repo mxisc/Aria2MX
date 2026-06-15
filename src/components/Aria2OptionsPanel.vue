@@ -18,7 +18,7 @@ type OptionCopy = {
 }
 
 const options = ref<Aria2OptionMap>({})
-const draft = ref('')
+const baseline = ref<Aria2OptionMap>({})
 const loading = ref(false)
 const message = ref('')
 const activeCategory = ref('basic')
@@ -245,10 +245,7 @@ async function load() {
   message.value = ''
   try {
     options.value = await api.aria2<Aria2OptionMap>('aria2.getGlobalOption')
-    draft.value = Object.entries(options.value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, value]) => `${key}=${value}`)
-      .join('\n')
+    baseline.value = { ...options.value }
   } catch (error) {
     message.value = error instanceof Error ? error.message : '全局选项读取失败。'
   } finally {
@@ -258,14 +255,11 @@ async function load() {
 
 async function save() {
   const patch: Record<string, string> = {}
-  for (const line of draft.value.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const index = trimmed.indexOf('=')
-    if (index <= 0) continue
-    const key = trimmed.slice(0, index).trim()
-    const value = trimmed.slice(index + 1).trim()
-    if (options.value[key] !== value) patch[key] = value
+  const allKeys = new Set([...Object.keys(baseline.value), ...Object.keys(options.value)])
+  for (const key of allKeys) {
+    const nextValue = options.value[key] ?? ''
+    const prevValue = baseline.value[key] ?? ''
+    if (nextValue !== prevValue) patch[key] = nextValue
   }
   if (Object.keys(patch).length === 0) {
     message.value = '没有需要保存的变化。'
@@ -274,8 +268,8 @@ async function save() {
   loading.value = true
   message.value = ''
   try {
-    await api.aria2('aria2.changeGlobalOption', [patch])
-    message.value = '全局选项已保存。'
+    const result = await api.saveManagedAria2Options(patch)
+    message.value = result.message
     await load()
   } catch (error) {
     message.value = error instanceof Error ? error.message : '全局选项保存失败。'
@@ -284,11 +278,18 @@ async function save() {
   }
 }
 
-function syncDraft() {
-  draft.value = Object.entries(options.value)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`)
-    .join('\n')
+async function reset() {
+  loading.value = true
+  message.value = ''
+  try {
+    const result = await api.resetManagedAria2Options()
+    message.value = result.message
+    await load()
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : '全局选项重置失败。'
+  } finally {
+    loading.value = false
+  }
 }
 
 function optionValue(key: string) {
@@ -298,7 +299,6 @@ function optionValue(key: string) {
 function updateOption(key: string, event: Event) {
   const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
   options.value[key] = target.value
-  syncDraft()
 }
 
 function optionTitle(key: string) {
@@ -306,16 +306,29 @@ function optionTitle(key: string) {
 }
 
 function optionDescription(key: string) {
-  return copy[key]?.description || '来自 aria2 全局选项。保存后通过 aria2.changeGlobalOption 生效。'
+  return copy[key]?.description || '来自 aria2 全局选项。'
+}
+
+function optionControlKind(key: string) {
+  if (copy[key]?.choices?.length) return 'select'
+  if (key === 'header' || key.includes('tracker') || key === 'no-proxy') return 'textarea'
+  return 'input'
+}
+
+function optionTypeLabel(key: string) {
+  if (copy[key]?.choices?.length) return '枚举'
+  if (optionControlKind(key) === 'textarea') return '多行'
+  return '文本'
+}
+
+function optionDisplayValue(key: string) {
+  const value = optionValue(key)
+  return value || '默认'
 }
 </script>
 
 <template>
   <section class="panel options-panel">
-    <div class="section-title">
-      <SlidersHorizontal :size="17" />
-      <span>aria2 全局选项</span>
-    </div>
     <div class="settings-layout">
       <aside class="settings-nav">
         <button
@@ -330,58 +343,74 @@ function optionDescription(key: string) {
       </aside>
 
       <div class="settings-content">
-        <label class="search-box">
-          <input v-model="search" placeholder="搜索 aria2 选项或中文文案">
-        </label>
-
-        <div class="option-cards">
-          <label v-for="key in visibleKeys" :key="key" class="option-card">
-            <span class="option-title">
-              <strong>{{ optionTitle(key) }}</strong>
-              <code>{{ key }}</code>
-            </span>
-            <small>{{ optionDescription(key) }}</small>
-            <select
-              v-if="copy[key]?.choices"
-              :value="optionValue(key)"
-              :disabled="copy[key]?.readonly || loading"
-              @change="updateOption(key, $event)"
-            >
-              <option v-if="!optionValue(key)" value="">
-                默认
-              </option>
-              <option v-for="choice in copy[key].choices" :key="choice" :value="choice">
-                {{ choice }}
-              </option>
-            </select>
-            <textarea
-              v-else-if="key === 'header' || key.includes('tracker') || key === 'no-proxy'"
-              :value="optionValue(key)"
-              :disabled="copy[key]?.readonly || loading"
-              spellcheck="false"
-              @input="updateOption(key, $event)"
-            />
-            <input
-              v-else
-              :value="optionValue(key)"
-              :disabled="copy[key]?.readonly || loading"
-              @input="updateOption(key, $event)"
-            >
+        <div class="settings-content-head">
+          <div class="section-title">
+            <SlidersHorizontal :size="17" />
+            <span>aria2 全局选项</span>
+          </div>
+          <label class="search-box">
+            <input v-model="search" placeholder="搜索 aria2 选项或中文文案">
           </label>
         </div>
+
+        <div class="option-rows">
+          <div
+            v-for="key in visibleKeys"
+            :key="key"
+            class="option-row"
+            :class="{ multiline: optionControlKind(key) === 'textarea' }"
+          >
+            <div class="option-main">
+              <b>{{ optionTitle(key) }}</b>
+              <small v-if="optionDescription(key)">{{ optionDescription(key) }}</small>
+              <code>{{ key }}</code>
+            </div>
+            <div class="option-meta">
+              <span class="type">{{ optionTypeLabel(key) }}</span>
+            </div>
+            <div class="option-editor-cell">
+              <select
+                v-if="optionControlKind(key) === 'select'"
+                :value="optionValue(key)"
+                :disabled="loading"
+                @change="updateOption(key, $event)"
+              >
+                <option v-if="!optionValue(key)" value="">
+                  默认
+                </option>
+                <option v-for="choice in copy[key]?.choices || []" :key="choice" :value="choice">
+                  {{ choice }}
+                </option>
+              </select>
+              <textarea
+                v-else-if="optionControlKind(key) === 'textarea'"
+                :value="optionValue(key)"
+                :disabled="loading"
+                spellcheck="false"
+                @input="updateOption(key, $event)"
+              />
+              <input
+                v-else
+                :value="optionValue(key)"
+                :disabled="loading"
+                @input="updateOption(key, $event)"
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="button-row option-actions">
+          <button class="primary" :disabled="loading" @click="save">
+            保存
+          </button>
+          <button class="ghost" :disabled="loading" @click="load">
+            刷新
+          </button>
+          <button class="ghost" :disabled="loading" @click="reset">
+            重置默认值
+          </button>
+        </div>
       </div>
-    </div>
-    <p class="hint">
-      分组和文案参考 AriaNg。高级编辑区每行一个 `key=value`，只会保存发生变化的项。
-    </p>
-    <textarea v-model="draft" spellcheck="false" />
-    <div class="button-row">
-      <button class="primary" :disabled="loading" @click="save">
-        保存全局选项
-      </button>
-      <button class="ghost" :disabled="loading" @click="load">
-        重新读取
-      </button>
     </div>
     <p v-if="message" class="hint">
       {{ message }}

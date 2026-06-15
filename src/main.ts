@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
 import router from './router'
+import { applyTheme } from './theme'
+
+applyTheme('design')
 
 // 创建Vue应用实例
 const app = createApp(App)

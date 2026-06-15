@@ -1,4 +1,4 @@
-import type { ApiResponse, AppConfig, Aria2Task, CurrentUser, GlobalStat } from './types'
+import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult } from './types'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -26,6 +26,9 @@ export const api = {
   me() {
     return request<CurrentUser>('/api/auth/me')
   },
+  getAbout() {
+    return request<AppAbout>('/api/about')
+  },
   getConfig() {
     return request<AppConfig>('/api/config')
   },
@@ -39,6 +42,17 @@ export const api = {
     return request<T>('/api/aria2/call', {
       method: 'POST',
       body: JSON.stringify({ method, params }),
+    })
+  },
+  saveManagedAria2Options(patch: Record<string, string>) {
+    return request<ManagedOptionsSaveResult>('/api/aria2/options', {
+      method: 'POST',
+      body: JSON.stringify({ patch }),
+    })
+  },
+  resetManagedAria2Options() {
+    return request<ManagedOptionsSaveResult>('/api/aria2/options/reset', {
+      method: 'POST',
     })
   },
   uploadTorrent(file: File) {

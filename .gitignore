@@ -10,6 +10,7 @@ lerna-debug.log*
 # Runtime config and secrets
 ariamx.json
 ariamx.json.tmp
+ariamx-data/
 .env
 .env.*
 !.env.example
@@ -24,6 +25,7 @@ dist-ssr
 *.test
 coverage.out
 coverage.html
+internal/aria2embed/runtime/*.tar.gz
 
 # Project cleanup holding area
 Trash/

@@ -1,0 +1,38 @@
+image: golang:1.23-bookworm
+
+stages:
+  - build
+
+variables:
+  CGO_ENABLED: "0"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+
+build:allinone:
+  stage: build
+  parallel:
+    matrix:
+      - GOOS: linux
+        GOARCH: amd64
+        RUNTIME_TARGET: linux-amd64
+      - GOOS: linux
+        GOARCH: arm64
+        RUNTIME_TARGET: linux-arm64
+      - GOOS: darwin
+        GOARCH: arm64
+        RUNTIME_TARGET: darwin-arm64
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends nodejs npm libarchive-tools ca-certificates
+    - npm install -g pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm run build
+    - node scripts/prepare-aria2-runtime.mjs "$RUNTIME_TARGET"
+    - mkdir -p dist/release
+    - GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -tags allinone -o "dist/release/ariamx-${GOOS}-${GOARCH}" ./cmd/ariamx
+  artifacts:
+    name: "ariamx-${GOOS}-${GOARCH}-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - dist/release/ariamx-${GOOS}-${GOARCH}
+    expire_in: 7 days

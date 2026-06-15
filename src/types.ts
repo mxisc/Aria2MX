@@ -15,8 +15,22 @@ export type CurrentUser = {
 export type AppConfig = {
   aria2RpcUrl: string
   hasAria2Secret: boolean
+  aria2Managed: boolean
+  managedRpcPort: number
   refreshIntervalMs: number
   defaultDownloadDir: string
+  theme: 'classic' | 'design'
+}
+
+export type AppAbout = {
+  panelVersion: string
+  aria2Version: string
+  rpcPath: string
+}
+
+export type ManagedOptionsSaveResult = {
+  restarted: boolean
+  message: string
 }
 
 export type Aria2File = {

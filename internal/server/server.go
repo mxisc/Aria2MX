@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ariamx/internal/version"
 )
 
 type Options struct {
@@ -24,6 +26,7 @@ type Server struct {
 	cfgMu      sync.RWMutex
 	sessions   *SessionStore
 	aria2      *Aria2Client
+	managed    *ManagedAria2
 	assets     embed.FS
 }
 
@@ -38,7 +41,7 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-func New(opts Options) *Server {
+func New(opts Options) (*Server, error) {
 	s := &Server{
 		configPath: opts.ConfigPath,
 		cfg:        opts.Config,
@@ -50,7 +53,13 @@ func New(opts Options) *Server {
 		defer s.cfgMu.RUnlock()
 		return s.cfg.Aria2
 	})
-	return s
+	if s.cfg.Aria2.Managed {
+		s.managed = NewManagedAria2(opts.ConfigPath, s.cfg, &s.cfgMu, s.aria2)
+		if err := s.managed.Start(); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -58,16 +67,24 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/logout", s.withAuth(s.handleLogout))
 	mux.HandleFunc("/api/auth/me", s.withAuth(s.handleMe))
+	mux.HandleFunc("/api/about", s.withAuth(s.handleAbout))
 	mux.HandleFunc("/api/config", s.withAuth(s.handleConfig))
+	mux.HandleFunc("/api/aria2/options", s.withAuth(s.handleAria2Options))
+	mux.HandleFunc("/api/aria2/options/reset", s.withAuth(s.handleAria2OptionsReset))
 	mux.HandleFunc("/api/aria2/call", s.withAuth(s.handleAria2Call))
 	mux.HandleFunc("/api/aria2/upload-torrent", s.withAuth(s.handleTorrentUpload))
+	mux.HandleFunc("/jsonrpc", s.withAuth(s.handlePanelRPC))
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/", s.handleStatic)
 	return securityHeaders(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: map[string]string{"status": "ok"}})
+	data := map[string]interface{}{"status": "ok"}
+	if s.managed != nil {
+		data["aria2Managed"] = true
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +141,26 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
+func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	aria2Version := ""
+	if result, err := s.aria2.Call(Aria2CallRequest{Method: "aria2.getVersion"}); err == nil {
+		if payload, ok := result.(map[string]interface{}); ok {
+			if value, ok := payload["version"].(string); ok {
+				aria2Version = value
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: map[string]interface{}{
+		"panelVersion": version.PanelVersion,
+		"aria2Version": aria2Version,
+		"rpcPath":      "/jsonrpc",
+	}})
+}
+
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -132,8 +169,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
 			"aria2RpcUrl":        cfg.Aria2.RPCURL,
 			"hasAria2Secret":     cfg.Aria2.RPCSecret != "",
+			"aria2Managed":       cfg.Aria2.Managed,
+			"managedRpcPort":     cfg.Aria2.ManagedRPCPort,
 			"refreshIntervalMs":  cfg.Panel.RefreshIntervalMs,
 			"defaultDownloadDir": cfg.Panel.DefaultDownloadDir,
+			"theme":              cfg.Panel.Theme,
 		}
 		s.cfgMu.RUnlock()
 		writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
@@ -143,6 +183,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			Aria2Secret        *string `json:"aria2Secret"`
 			RefreshIntervalMs  *int    `json:"refreshIntervalMs"`
 			DefaultDownloadDir *string `json:"defaultDownloadDir"`
+			Theme              *string `json:"theme"`
 			NewPassword        *string `json:"newPassword"`
 		}
 		if err := readJSON(r, &payload); err != nil {
@@ -150,17 +191,22 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.cfgMu.Lock()
-		if payload.Aria2RPCURL != nil && *payload.Aria2RPCURL != "" {
-			s.cfg.Aria2.RPCURL = *payload.Aria2RPCURL
-		}
-		if payload.Aria2Secret != nil {
-			s.cfg.Aria2.RPCSecret = *payload.Aria2Secret
+		if !s.cfg.Aria2.Managed {
+			if payload.Aria2RPCURL != nil && *payload.Aria2RPCURL != "" {
+				s.cfg.Aria2.RPCURL = *payload.Aria2RPCURL
+			}
+			if payload.Aria2Secret != nil {
+				s.cfg.Aria2.RPCSecret = *payload.Aria2Secret
+			}
 		}
 		if payload.RefreshIntervalMs != nil && *payload.RefreshIntervalMs >= 500 {
 			s.cfg.Panel.RefreshIntervalMs = *payload.RefreshIntervalMs
 		}
 		if payload.DefaultDownloadDir != nil {
 			s.cfg.Panel.DefaultDownloadDir = *payload.DefaultDownloadDir
+		}
+		if payload.Theme != nil && (*payload.Theme == "classic" || *payload.Theme == "design") {
+			s.cfg.Panel.Theme = *payload.Theme
 		}
 		if payload.NewPassword != nil && len(*payload.NewPassword) >= 6 {
 			salt, err := randomHex(16)
@@ -182,6 +228,50 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w)
 	}
+}
+
+func (s *Server) handleAria2Options(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if s.managed == nil {
+		writeAPIError(w, http.StatusBadRequest, "managed_disabled", "当前 aria2 不是由面板托管，无法保存内置全局选项。")
+		return
+	}
+
+	var payload struct {
+		Patch map[string]string `json:"patch"`
+	}
+	if err := readJSON(r, &payload); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查选项内容后重试。")
+		return
+	}
+
+	result, err := s.managed.SaveOptions(payload.Patch)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "aria2_save_failed", "aria2 选项保存失败，请稍后重试。")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
+}
+
+func (s *Server) handleAria2OptionsReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if s.managed == nil {
+		writeAPIError(w, http.StatusBadRequest, "managed_disabled", "当前 aria2 不是由面板托管，无法重置内置全局选项。")
+		return
+	}
+
+	result, err := s.managed.ResetOptions()
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "aria2_reset_failed", "aria2 选项重置失败，请稍后重试。")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
 }
 
 func (s *Server) handleAria2Call(w http.ResponseWriter, r *http.Request) {

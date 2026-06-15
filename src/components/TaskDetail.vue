@@ -16,6 +16,25 @@ const message = ref('')
 
 const trackerRows = computed(() => props.task?.bittorrent?.announceList?.flatMap((group, index) => group.map((url) => ({ group: index + 1, url }))) || [])
 const selectedFiles = computed(() => (props.task?.files || []).filter((file) => file.selected === 'true').map((file) => file.index).join(','))
+const overviewItems = computed(() => {
+  if (!props.task) return []
+  const task = props.task
+  return [
+    { key: 'status', label: '状态', value: statusLabel(task.status) },
+    { key: 'progress', label: '进度', value: `${percent(task)}%` },
+    { key: 'size', label: '大小', value: bytes(task.totalLength) },
+    { key: 'completed', label: '已完成', value: bytes(task.completedLength) },
+    { key: 'downloadSpeed', label: '下载速度', value: speed(task.downloadSpeed) },
+    { key: 'uploadSpeed', label: '上传速度', value: speed(task.uploadSpeed) },
+    { key: 'uploadLength', label: '上传量', value: bytes(task.uploadLength) },
+    { key: 'connections', label: '连接数', value: task.connections || '0' },
+    { key: 'seeders', label: 'Seed 数', value: task.numSeeders || '0' },
+    { key: 'seeder', label: '做种', value: boolLabel(task.seeder) },
+    { key: 'pieces', label: '分片', value: `${numberText(task.numPieces)} × ${bytes(task.pieceLength)}` },
+    { key: 'gid', label: 'GID', value: task.gid, wide: true },
+    { key: 'dir', label: '目录', value: task.dir || '-', wide: true },
+  ]
+})
 
 watch(() => props.task?.gid, () => {
   tab.value = 'overview'
@@ -115,18 +134,15 @@ function toggleFile(fileIndex: string, checked: boolean) {
 
       <div class="detail-scroll">
         <div v-if="tab === 'overview'" class="detail-grid">
-          <div><span>GID</span><strong>{{ task.gid }}</strong></div>
-          <div><span>状态</span><strong>{{ statusLabel(task.status) }}</strong></div>
-          <div><span>大小</span><strong>{{ bytes(task.totalLength) }}</strong></div>
-          <div><span>已完成</span><strong>{{ bytes(task.completedLength) }}</strong></div>
-          <div><span>下载速度</span><strong>{{ speed(task.downloadSpeed) }}</strong></div>
-          <div><span>上传速度</span><strong>{{ speed(task.uploadSpeed) }}</strong></div>
-          <div><span>上传量</span><strong>{{ bytes(task.uploadLength) }}</strong></div>
-          <div><span>连接数</span><strong>{{ task.connections || '0' }}</strong></div>
-          <div><span>Seed 数</span><strong>{{ task.numSeeders || '0' }}</strong></div>
-          <div><span>做种</span><strong>{{ boolLabel(task.seeder) }}</strong></div>
-          <div><span>分片</span><strong>{{ numberText(task.numPieces) }} × {{ bytes(task.pieceLength) }}</strong></div>
-          <div><span>目录</span><strong>{{ task.dir || '-' }}</strong></div>
+          <div
+            v-for="item in overviewItems"
+            :key="item.key"
+            class="detail-cell"
+            :class="{ wide: item.wide }"
+          >
+            <span class="detail-cell-label">{{ item.label }}</span>
+            <strong class="detail-cell-value">{{ item.value }}</strong>
+          </div>
         </div>
 
         <div v-else-if="tab === 'files'" class="file-list expanded">
