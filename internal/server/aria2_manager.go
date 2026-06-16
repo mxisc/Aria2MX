@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +65,12 @@ var managedRestartOptionKeys = map[string]struct{}{
 	"truncate-console-readout": {},
 }
 
+var managedCommaSeparatedOptionKeys = map[string]struct{}{
+	"bt-tracker":         {},
+	"bt-exclude-tracker": {},
+	"no-proxy":           {},
+}
+
 type ManagedAria2 struct {
 	configPath string
 	cfg        *Config
@@ -73,6 +80,7 @@ type ManagedAria2 struct {
 	procMu sync.Mutex
 	cmd    *exec.Cmd
 	waitCh chan error
+	reused bool
 }
 
 type ManagedOptionsSaveResult struct {
@@ -95,9 +103,30 @@ func (m *ManagedAria2) Start() error {
 	return m.startLocked()
 }
 
+func (m *ManagedAria2) Stop() error {
+	m.procMu.Lock()
+	defer m.procMu.Unlock()
+	return m.stopLocked()
+}
+
 func (m *ManagedAria2) SaveOptions(patch map[string]string) (ManagedOptionsSaveResult, error) {
 	if len(patch) == 0 {
 		return ManagedOptionsSaveResult{Message: "没有需要保存的变化。"}, nil
+	}
+
+	currentCfg := m.snapshotConfig()
+	targetRPCPort, err := managedRPCPortForPatch(currentCfg.ManagedRPCPort, patch)
+	if err != nil {
+		return ManagedOptionsSaveResult{}, err
+	}
+	assignedRPCPort := targetRPCPort
+	portAdjusted := false
+	if targetRPCPort != currentCfg.ManagedRPCPort {
+		assignedRPCPort, err = findAvailableManagedRPCPort(targetRPCPort, 10)
+		if err != nil {
+			return ManagedOptionsSaveResult{}, err
+		}
+		portAdjusted = assignedRPCPort != targetRPCPort
 	}
 
 	restartNeeded := false
@@ -114,6 +143,10 @@ func (m *ManagedAria2) SaveOptions(patch map[string]string) (ManagedOptionsSaveR
 		m.cfgMu.Unlock()
 		return ManagedOptionsSaveResult{}, err
 	}
+	if assignedRPCPort != m.cfg.Aria2.ManagedRPCPort {
+		m.cfg.Aria2.ManagedRPCPort = assignedRPCPort
+		m.cfg.Aria2.RPCURL = managedRPCURL(assignedRPCPort)
+	}
 	saveErr := SaveConfig(m.configPath, m.cfg)
 	m.cfgMu.Unlock()
 	if saveErr != nil {
@@ -129,7 +162,7 @@ func (m *ManagedAria2) SaveOptions(patch map[string]string) (ManagedOptionsSaveR
 		}
 		return ManagedOptionsSaveResult{
 			Restarted: true,
-			Message:   "选项已保存，aria2 已重启并重新加载配置。",
+			Message:   managedRestartMessage(assignedRPCPort, portAdjusted),
 		}, nil
 	}
 
@@ -160,9 +193,10 @@ func (m *ManagedAria2) ResetOptions() (ManagedOptionsSaveResult, error) {
 	if err != nil {
 		return ManagedOptionsSaveResult{}, err
 	}
+	currentCfg := m.snapshotConfig()
 	return ManagedOptionsSaveResult{
 		Restarted: true,
-		Message:   "aria2 配置已重置为默认值，aria2 已重启。",
+		Message:   managedResetMessage(currentCfg.ManagedRPCPort),
 	}, nil
 }
 
@@ -172,7 +206,8 @@ func applyManagedOptionPatch(cfg *Config, patch map[string]string) (map[string]s
 	}
 	sanitizedPatch := make(map[string]string, len(patch))
 	for key, value := range patch {
-		trimmed := strings.TrimSpace(value)
+		normalized := normalizeManagedOptionValue(key, value)
+		trimmed := strings.TrimSpace(normalized)
 		switch key {
 		case "rpc-listen-port":
 			if trimmed == "" {
@@ -192,18 +227,123 @@ func applyManagedOptionPatch(cfg *Config, patch map[string]string) (map[string]s
 			delete(cfg.Aria2.Options, key)
 			continue
 		}
-		cfg.Aria2.Options[key] = value
-		sanitizedPatch[key] = value
+		cfg.Aria2.Options[key] = normalized
+		sanitizedPatch[key] = normalized
 	}
 	return sanitizedPatch, nil
+}
+
+func normalizeManagedOptionValue(key, value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if _, ok := managedCommaSeparatedOptionKeys[key]; ok {
+		parts := splitManagedOptionList(trimmed)
+		return strings.Join(parts, ",")
+	}
+	return value
+}
+
+func splitManagedOptionList(value string) []string {
+	fields := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '\n' || r == '\r' || r == ','
+	})
+	parts := make([]string, 0, len(fields))
+	seen := map[string]struct{}{}
+	for _, field := range fields {
+		item := strings.TrimSpace(field)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		parts = append(parts, item)
+	}
+	return parts
+}
+
+func managedRPCPortForPatch(currentPort int, patch map[string]string) (int, error) {
+	value, ok := patch["rpc-listen-port"]
+	if !ok {
+		return currentPort, nil
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultManagedRPCPort, nil
+	}
+	port, err := strconv.Atoi(trimmed)
+	if err != nil || port <= 0 || port > 65535 {
+		return 0, errors.New("RPC 监听端口无效，请输入 1-65535 之间的整数。")
+	}
+	return port, nil
+}
+
+func ensureManagedRPCPortAvailable(port int) error {
+	if err := probeManagedRPCPort("tcp4", fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
+		return fmt.Errorf("RPC 监听端口 %d 已被占用，请换一个端口后再保存。", port)
+	}
+	if err := probeManagedRPCPort("tcp6", fmt.Sprintf("[::1]:%d", port)); err != nil && !ignorableIPv6ProbeErr(err) {
+		return fmt.Errorf("RPC 监听端口 %d 已被占用，请换一个端口后再保存。", port)
+	}
+	return nil
+}
+
+func findAvailableManagedRPCPort(preferredPort, step int) (int, error) {
+	if step <= 0 {
+		step = 10
+	}
+	for port := preferredPort; port <= 65535; port += step {
+		if ensureManagedRPCPortAvailable(port) == nil {
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("RPC 监听端口 %d 以及后续步进端口都不可用，请检查端口占用。", preferredPort)
+}
+
+func probeManagedRPCPort(network, address string) error {
+	listener, err := net.Listen(network, address)
+	if err != nil {
+		return err
+	}
+	return listener.Close()
+}
+
+func ignorableIPv6ProbeErr(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "address family not supported") ||
+		strings.Contains(message, "cannot assign requested address") ||
+		strings.Contains(message, "unsupported operation")
 }
 
 func (m *ManagedAria2) startLocked() error {
 	if m.cmd != nil {
 		return nil
 	}
+	if m.reused {
+		return nil
+	}
 
 	cfg := m.snapshotConfig()
+	desiredPort := cfg.ManagedRPCPort
+	if err := ensureManagedRPCPortAvailable(cfg.ManagedRPCPort); err != nil {
+		if m.canReuseExistingLocked() {
+			m.reused = true
+			log.Printf("managed aria2 reused existing process on %s", cfg.RPCURL)
+			return nil
+		}
+		assignedPort, assignErr := findAvailableManagedRPCPort(cfg.ManagedRPCPort+10, 10)
+		if assignErr != nil {
+			return err
+		}
+		if updateErr := m.persistManagedRPCPortLocked(assignedPort); updateErr != nil {
+			return updateErr
+		}
+		cfg = m.snapshotConfig()
+		log.Printf("managed aria2 rpc port %d occupied, switched to %d", desiredPort, assignedPort)
+	}
 	root := m.stateRoot(cfg)
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
@@ -277,6 +417,14 @@ func (m *ManagedAria2) startLocked() error {
 	return nil
 }
 
+func (m *ManagedAria2) persistManagedRPCPortLocked(port int) error {
+	m.cfgMu.Lock()
+	defer m.cfgMu.Unlock()
+	m.cfg.Aria2.ManagedRPCPort = port
+	m.cfg.Aria2.RPCURL = managedRPCURL(port)
+	return SaveConfig(m.configPath, m.cfg)
+}
+
 func (m *ManagedAria2) restartLocked() error {
 	if err := m.stopLocked(); err != nil {
 		return err
@@ -285,6 +433,10 @@ func (m *ManagedAria2) restartLocked() error {
 }
 
 func (m *ManagedAria2) stopLocked() error {
+	if m.reused {
+		m.reused = false
+		return m.shutdownReusedLocked()
+	}
 	if m.cmd == nil {
 		return nil
 	}
@@ -325,6 +477,79 @@ func normalizeExitErr(err error) error {
 		return nil
 	}
 	return err
+}
+
+func (m *ManagedAria2) canReuseExistingLocked() bool {
+	result, err := m.client.Call(Aria2CallRequest{Method: "aria2.getVersion"})
+	if err != nil {
+		return false
+	}
+	versionInfo, ok := result.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	version, _ := versionInfo["version"].(string)
+	return strings.TrimSpace(version) != ""
+}
+
+func (m *ManagedAria2) shutdownReusedLocked() error {
+	_, err := m.client.Call(Aria2CallRequest{Method: "aria2.forceShutdown"})
+	if err != nil && !isExpectedShutdownErr(err) {
+		return err
+	}
+	return m.waitForRPCPortReleased(5 * time.Second)
+}
+
+func (m *ManagedAria2) waitForRPCPortReleased(timeout time.Duration) error {
+	cfg := m.snapshotConfig()
+	deadline := time.Now().Add(timeout)
+	addresses := []string{
+		fmt.Sprintf("127.0.0.1:%d", cfg.ManagedRPCPort),
+		fmt.Sprintf("[::1]:%d", cfg.ManagedRPCPort),
+	}
+	for time.Now().Before(deadline) {
+		if !isAnyRPCAddressReachable(addresses) {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return errors.New("等待 aria2 退出超时")
+}
+
+func isAnyRPCAddressReachable(addresses []string) bool {
+	for _, address := range addresses {
+		conn, err := net.DialTimeout("tcp", address, 300*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
+}
+
+func isExpectedShutdownErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connection reset") ||
+		strings.Contains(message, "eof") ||
+		strings.Contains(message, "broken pipe") ||
+		strings.Contains(message, "aria2 unreachable")
+}
+
+func managedRestartMessage(port int, adjusted bool) string {
+	if adjusted {
+		return fmt.Sprintf("目标 RPC 端口已被占用，已自动切换到 %d，aria2 已重启并重新加载配置。", port)
+	}
+	return "选项已保存，aria2 已重启并重新加载配置。"
+}
+
+func managedResetMessage(port int) string {
+	if port != defaultManagedRPCPort {
+		return fmt.Sprintf("aria2 配置已重置为默认值；默认 RPC 端口 %d 被占用，已自动切换到 %d 并重启。", defaultManagedRPCPort, port)
+	}
+	return "aria2 配置已重置为默认值，aria2 已重启。"
 }
 
 func (m *ManagedAria2) waitForReady(timeout time.Duration) error {
@@ -388,7 +613,7 @@ func (m *ManagedAria2) writeConfigFile(root string, cfg Aria2Config) (string, er
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		value := strings.TrimSpace(cfg.Options[key])
+		value := strings.TrimSpace(normalizeManagedOptionValue(key, cfg.Options[key]))
 		if value == "" {
 			continue
 		}

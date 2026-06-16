@@ -9,6 +9,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': 'http://127.0.0.1:18081',
+      '/mcp': 'http://127.0.0.1:18081',
       '/jsonrpc': {
         target: 'http://127.0.0.1:18081',
         ws: true,

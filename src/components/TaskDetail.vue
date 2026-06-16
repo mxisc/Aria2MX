@@ -1,39 +1,70 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@/api'
-import type { Aria2OptionMap, Aria2Peer, Aria2Server, Aria2Task } from '@/types'
+import type { Aria2Peer, Aria2Server, Aria2Task } from '@/types'
 import { boolLabel, bytes, numberText, percent, speed, statusLabel, taskName } from '@/utils/format'
 
 const props = defineProps<{ task?: Aria2Task }>()
 const emit = defineEmits<{ changed: [] }>()
 
-const tab = ref<'overview' | 'files' | 'options' | 'peers' | 'servers' | 'trackers'>('overview')
-const options = ref<Aria2OptionMap>({})
+const tab = ref<'overview' | 'files' | 'peers' | 'servers' | 'trackers'>('overview')
 const peers = ref<Aria2Peer[]>([])
 const servers = ref<Aria2Server[]>([])
-const optionDraft = ref('')
 const message = ref('')
 
+const hasFiles = computed(() => (props.task?.files?.length || 0) > 0)
+const hasPeerRows = computed(() => peers.value.length > 0)
+const serverRows = computed(() => servers.value.flatMap((server) => server.servers.map((item) => ({
+  key: `${server.index}-${item.uri}`,
+  fileIndex: server.index,
+  uri: item.currentUri || item.uri,
+  downloadSpeed: item.downloadSpeed,
+}))))
 const trackerRows = computed(() => props.task?.bittorrent?.announceList?.flatMap((group, index) => group.map((url) => ({ group: index + 1, url }))) || [])
+const hasTrackerRows = computed(() => trackerRows.value.length > 0)
+const isBitTorrentTask = computed(() => Boolean(props.task?.bittorrent))
 const selectedFiles = computed(() => (props.task?.files || []).filter((file) => file.selected === 'true').map((file) => file.index).join(','))
 const overviewItems = computed(() => {
   if (!props.task) return []
   const task = props.task
-  return [
+  const items: Array<{ key: string, label: string, value: string, wide?: boolean }> = [
     { key: 'status', label: '状态', value: statusLabel(task.status) },
     { key: 'progress', label: '进度', value: `${percent(task)}%` },
     { key: 'size', label: '大小', value: bytes(task.totalLength) },
     { key: 'completed', label: '已完成', value: bytes(task.completedLength) },
     { key: 'downloadSpeed', label: '下载速度', value: speed(task.downloadSpeed) },
-    { key: 'uploadSpeed', label: '上传速度', value: speed(task.uploadSpeed) },
-    { key: 'uploadLength', label: '上传量', value: bytes(task.uploadLength) },
-    { key: 'connections', label: '连接数', value: task.connections || '0' },
-    { key: 'seeders', label: 'Seed 数', value: task.numSeeders || '0' },
-    { key: 'seeder', label: '做种', value: boolLabel(task.seeder) },
-    { key: 'pieces', label: '分片', value: `${numberText(task.numPieces)} × ${bytes(task.pieceLength)}` },
+  ]
+  if (Number(task.uploadLength || 0) > 0 || Number(task.uploadSpeed || 0) > 0 || isBitTorrentTask.value) {
+    items.push({ key: 'uploadSpeed', label: '上传速度', value: speed(task.uploadSpeed) })
+  }
+  if (Number(task.uploadLength || 0) > 0) {
+    items.push({ key: 'uploadLength', label: '上传量', value: bytes(task.uploadLength) })
+  }
+  if (isBitTorrentTask.value && task.connections) {
+    items.push({ key: 'connections', label: '连接数', value: task.connections || '0' })
+  }
+  if (isBitTorrentTask.value && task.numSeeders) {
+    items.push({ key: 'seeders', label: 'Seed 数', value: task.numSeeders || '0' })
+  }
+  if (isBitTorrentTask.value && task.seeder) {
+    items.push({ key: 'seeder', label: '做种', value: boolLabel(task.seeder) })
+  }
+  if (isBitTorrentTask.value && (task.numPieces || task.pieceLength)) {
+    items.push({ key: 'pieces', label: '分片', value: `${numberText(task.numPieces)} × ${bytes(task.pieceLength)}` })
+  }
+  items.push(
     { key: 'gid', label: 'GID', value: task.gid, wide: true },
     { key: 'dir', label: '目录', value: task.dir || '-', wide: true },
-  ]
+  )
+  return items
+})
+const availableTabs = computed(() => {
+  const tabs: Array<{ key: typeof tab.value, label: string }> = [{ key: 'overview', label: '概览' }]
+  if (hasFiles.value) tabs.push({ key: 'files', label: '文件' })
+  if (hasPeerRows.value) tabs.push({ key: 'peers', label: 'Peer' })
+  if (serverRows.value.length > 0) tabs.push({ key: 'servers', label: 'Server' })
+  if (hasTrackerRows.value) tabs.push({ key: 'trackers', label: 'Tracker' })
+  return tabs
 })
 
 watch(() => props.task?.gid, () => {
@@ -42,41 +73,24 @@ watch(() => props.task?.gid, () => {
   loadDetail()
 }, { immediate: true })
 
+watch(availableTabs, (tabs) => {
+  if (!tabs.some((item) => item.key === tab.value)) {
+    tab.value = 'overview'
+  }
+})
+
 async function loadDetail() {
   if (!props.task?.gid) return
   try {
     const gid = props.task.gid
-    const [nextOptions, nextPeers, nextServers] = await Promise.all([
-      api.aria2<Aria2OptionMap>('aria2.getOption', [gid]),
+    const [nextPeers, nextServers] = await Promise.all([
       api.aria2<Aria2Peer[]>('aria2.getPeers', [gid]).catch(() => []),
       api.aria2<Aria2Server[]>('aria2.getServers', [gid]).catch(() => []),
     ])
-    options.value = nextOptions
     peers.value = nextPeers
     servers.value = nextServers
-    optionDraft.value = Object.entries(nextOptions).map(([key, value]) => `${key}=${value}`).join('\n')
   } catch (error) {
     message.value = error instanceof Error ? error.message : '任务详情读取失败。'
-  }
-}
-
-async function saveOptions() {
-  if (!props.task?.gid) return
-  const patch: Record<string, string> = {}
-  for (const line of optionDraft.value.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const index = trimmed.indexOf('=')
-    if (index <= 0) continue
-    patch[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim()
-  }
-  try {
-    await api.aria2('aria2.changeOption', [props.task.gid, patch])
-    message.value = '任务选项已保存。'
-    await loadDetail()
-    emit('changed')
-  } catch (error) {
-    message.value = error instanceof Error ? error.message : '任务选项保存失败。'
   }
 }
 
@@ -112,23 +126,8 @@ function toggleFile(fileIndex: string, checked: boolean) {
       </div>
 
       <div class="detail-tabs">
-        <button :class="{ active: tab === 'overview' }" @click="tab = 'overview'">
-          概览
-        </button>
-        <button :class="{ active: tab === 'files' }" @click="tab = 'files'">
-          文件
-        </button>
-        <button :class="{ active: tab === 'options' }" @click="tab = 'options'">
-          选项
-        </button>
-        <button :class="{ active: tab === 'peers' }" @click="tab = 'peers'">
-          Peer
-        </button>
-        <button :class="{ active: tab === 'servers' }" @click="tab = 'servers'">
-          Server
-        </button>
-        <button :class="{ active: tab === 'trackers' }" @click="tab = 'trackers'">
-          Tracker
+        <button v-for="item in availableTabs" :key="item.key" :class="{ active: tab === item.key }" @click="tab = item.key">
+          {{ item.label }}
         </button>
       </div>
 
@@ -168,16 +167,6 @@ function toggleFile(fileIndex: string, checked: boolean) {
           </div>
         </div>
 
-        <div v-else-if="tab === 'options'" class="option-editor">
-          <p class="hint">
-            每行一个 `key=value`，保存后调用 `aria2.changeOption`。
-          </p>
-          <textarea v-model="optionDraft" spellcheck="false" />
-          <button class="primary" @click="saveOptions">
-            保存任务选项
-          </button>
-        </div>
-
         <div v-else-if="tab === 'peers'" class="data-table">
           <div class="table-row head">
             <span>地址</span><span>下载</span><span>上传</span><span>做种</span>
@@ -194,15 +183,10 @@ function toggleFile(fileIndex: string, checked: boolean) {
         </div>
 
         <div v-else-if="tab === 'servers'" class="data-table">
-          <template v-for="server in servers" :key="server.index">
-            <div v-for="item in server.servers" :key="`${server.index}-${item.uri}`" class="table-row">
-              <span>{{ item.currentUri || item.uri }}</span>
-              <span>文件 {{ server.index }}</span>
-              <span>{{ speed(item.downloadSpeed) }}</span>
-            </div>
-          </template>
-          <div v-if="servers.length === 0" class="empty-state">
-            暂无 Server 信息。
+          <div v-for="server in serverRows" :key="server.key" class="table-row">
+            <span>{{ server.uri }}</span>
+            <span>文件 {{ server.fileIndex }}</span>
+            <span>{{ speed(server.downloadSpeed) }}</span>
           </div>
         </div>
 
@@ -213,9 +197,6 @@ function toggleFile(fileIndex: string, checked: boolean) {
           <div v-for="tracker in trackerRows" :key="`${tracker.group}-${tracker.url}`" class="table-row">
             <span>#{{ tracker.group }}</span>
             <span>{{ tracker.url }}</span>
-          </div>
-          <div v-if="trackerRows.length === 0" class="empty-state">
-            暂无 Tracker 信息。
           </div>
         </div>
       </div>

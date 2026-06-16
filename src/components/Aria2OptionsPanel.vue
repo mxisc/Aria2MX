@@ -21,8 +21,12 @@ const options = ref<Aria2OptionMap>({})
 const baseline = ref<Aria2OptionMap>({})
 const loading = ref(false)
 const message = ref('')
+const errorDialog = ref('')
 const activeCategory = ref('basic')
 const search = ref('')
+
+const multilineOptionKeys = new Set(['header', 'bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
+const commaSeparatedOptionKeys = new Set(['bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
 
 const categories: OptionCategory[] = [
   {
@@ -244,10 +248,11 @@ async function load() {
   loading.value = true
   message.value = ''
   try {
-    options.value = await api.aria2<Aria2OptionMap>('aria2.getGlobalOption')
+    const loaded = await api.aria2<Aria2OptionMap>('aria2.getGlobalOption')
+    options.value = normalizeOptionsForEditor(loaded)
     baseline.value = { ...options.value }
   } catch (error) {
-    message.value = error instanceof Error ? error.message : '全局选项读取失败。'
+    showError(error instanceof Error ? error.message : '全局选项读取失败。')
   } finally {
     loading.value = false
   }
@@ -272,7 +277,7 @@ async function save() {
     message.value = result.message
     await load()
   } catch (error) {
-    message.value = error instanceof Error ? error.message : '全局选项保存失败。'
+    showError(error instanceof Error ? error.message : '全局选项保存失败。')
   } finally {
     loading.value = false
   }
@@ -286,10 +291,18 @@ async function reset() {
     message.value = result.message
     await load()
   } catch (error) {
-    message.value = error instanceof Error ? error.message : '全局选项重置失败。'
+    showError(error instanceof Error ? error.message : '全局选项重置失败。')
   } finally {
     loading.value = false
   }
+}
+
+function showError(text: string) {
+  errorDialog.value = text
+}
+
+function closeErrorDialog() {
+  errorDialog.value = ''
 }
 
 function optionValue(key: string) {
@@ -311,7 +324,7 @@ function optionDescription(key: string) {
 
 function optionControlKind(key: string) {
   if (copy[key]?.choices?.length) return 'select'
-  if (key === 'header' || key.includes('tracker') || key === 'no-proxy') return 'textarea'
+  if (multilineOptionKeys.has(key)) return 'textarea'
   return 'input'
 }
 
@@ -324,6 +337,23 @@ function optionTypeLabel(key: string) {
 function optionDisplayValue(key: string) {
   const value = optionValue(key)
   return value || '默认'
+}
+
+function normalizeOptionsForEditor(source: Aria2OptionMap) {
+  const normalized: Aria2OptionMap = {}
+  for (const [key, value] of Object.entries(source)) {
+    normalized[key] = normalizeOptionValueForEditor(key, value)
+  }
+  return normalized
+}
+
+function normalizeOptionValueForEditor(key: string, value: string) {
+  if (!commaSeparatedOptionKeys.has(key)) return value ?? ''
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join('\n')
 }
 </script>
 
@@ -416,4 +446,17 @@ function optionDisplayValue(key: string) {
       {{ message }}
     </p>
   </section>
+  <Teleport to="body">
+    <div v-if="errorDialog" class="center-dialog-backdrop" @click="closeErrorDialog">
+      <div class="center-dialog" role="alertdialog" aria-modal="true" aria-label="错误提示" @click.stop>
+        <strong>操作失败</strong>
+        <p>{{ errorDialog }}</p>
+        <div class="button-row">
+          <button class="primary" @click="closeErrorDialog">
+            知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

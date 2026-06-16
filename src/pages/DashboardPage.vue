@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Activity, Eraser, Gauge, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, SlidersHorizontal } from 'lucide-vue-next'
+import { Activity, ArrowLeft, Blocks, Eraser, Gauge, Info, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, Shield, SlidersHorizontal } from 'lucide-vue-next'
 import { api, fetchDashboard } from '@/api'
 import AddTaskPanel from '@/components/AddTaskPanel.vue'
 import Aria2OptionsPanel from '@/components/Aria2OptionsPanel.vue'
+import ConnectionInfoPanel from '@/components/ConnectionInfoPanel.vue'
+import MCPPanel from '@/components/MCPPanel.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import PeerGuardPanel from '@/components/PeerGuardPanel.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 import TaskList from '@/components/TaskList.vue'
@@ -19,24 +22,39 @@ const stopped = ref<Aria2Task[]>([])
 const stat = ref<GlobalStat>({ downloadSpeed: '0', uploadSpeed: '0', numActive: '0', numWaiting: '0', numStopped: '0' })
 const selected = ref<Aria2Task>()
 const bucket = ref<TaskBucket>('active')
-const activePage = ref<'overview' | 'tasks' | 'add' | 'options' | 'settings'>('overview')
+const activePage = ref<'overview' | 'tasks' | 'taskDetail' | 'add' | 'options' | 'peerGuard' | 'connection' | 'mcp' | 'settings'>('overview')
 const query = ref('')
 const sortBy = ref<'name' | 'progress' | 'speed' | 'size'>('name')
 const error = ref('')
-const about = ref<AppAbout>({ panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc' })
+const about = ref<AppAbout>({ panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc', httpRpcUrl: '/jsonrpc', wsRpcUrl: '/jsonrpc', mcpHttpUrl: '/mcp', mcpEnabled: true, panelRpcSecret: '-' })
+const refreshIntervalMs = ref(1500)
 let timer: number | undefined
 
 const pageMeta = {
   overview: { title: '总览', subtitle: '查看下载速度、任务数量和常用操作。', badge: '控制台' },
   tasks: { title: '任务列表', subtitle: '筛选、检索并管理当前下载任务。', badge: '任务列表' },
+  taskDetail: { title: '任务详情', subtitle: '查看单个任务的完整状态、文件和选项。', badge: '任务详情' },
   add: { title: '新建任务', subtitle: '提交链接、磁力或种子文件。', badge: '新建任务' },
   options: { title: 'Aria2', subtitle: '按分类维护 aria2 全局参数。', badge: 'Aria2' },
+  peerGuard: { title: '节点防护', subtitle: '识别高风险 Peer 并通过系统防火墙封禁。', badge: '节点防护' },
+  connection: { title: '连接信息', subtitle: '查看当前面板代理、内置 RPC、MCP 和版本信息。', badge: '连接信息' },
+  mcp: { title: 'MCP', subtitle: '查看 MCP 可用工具。', badge: 'MCP' },
   settings: { title: '面板设置', subtitle: '维护 RPC、刷新间隔和面板登录配置。', badge: '面板设置' },
 } as const
 
 const allTasks = computed(() => [...active.value, ...waiting.value, ...stopped.value])
-const currentPageMeta = computed(() => pageMeta[activePage.value])
+const currentPageMeta = computed(() => {
+  if (activePage.value === 'taskDetail' && selected.value) {
+    return {
+      title: taskName(selected.value),
+      subtitle: '查看单个任务的完整状态、文件和选项。',
+      badge: '任务详情',
+    }
+  }
+  return pageMeta[activePage.value]
+})
 const currentBucketCount = computed(() => {
+  if (activePage.value === 'taskDetail') return selected.value ? '1' : '0'
   if (activePage.value !== 'tasks') return String(allTasks.value.length)
   if (bucket.value === 'waiting') return stat.value.numWaiting
   if (bucket.value === 'stopped') return stat.value.numStopped
@@ -60,15 +78,42 @@ const visibleTasks = computed(() => {
     })
 })
 
-onMounted(() => {
-  refresh()
+onMounted(async () => {
+  await loadRefreshConfig()
+  await refresh()
   loadAbout()
-  timer = window.setInterval(refresh, 1500)
+  startRefreshTimer()
 })
 
 onUnmounted(() => {
-  if (timer) window.clearInterval(timer)
+  stopRefreshTimer()
 })
+
+function startRefreshTimer() {
+  stopRefreshTimer()
+  timer = window.setInterval(refresh, refreshIntervalMs.value)
+}
+
+function stopRefreshTimer() {
+  if (timer) window.clearInterval(timer)
+  timer = undefined
+}
+
+async function loadRefreshConfig() {
+  try {
+    const config = await api.getConfig()
+    applyRefreshInterval(config.refreshIntervalMs)
+  } catch {
+    applyRefreshInterval(1500)
+  }
+}
+
+function applyRefreshInterval(next: number) {
+  refreshIntervalMs.value = next >= 500 ? next : 1500
+  if (timer) {
+    startRefreshTimer()
+  }
+}
 
 async function refresh() {
   try {
@@ -79,17 +124,26 @@ async function refresh() {
     stat.value = data.stat
     const all = [...data.active, ...data.waiting, ...data.stopped]
     selected.value = all.find((task) => task.gid === selected.value?.gid) || all[0]
+    if (activePage.value === 'taskDetail' && !selected.value) {
+      activePage.value = 'tasks'
+    }
     error.value = ''
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '无法连接 aria2。'
   }
 }
 
+function openTask(task: Aria2Task) {
+  selected.value = task
+  bucket.value = task.status === 'waiting' || task.status === 'paused' ? 'waiting' : task.status === 'active' ? 'active' : 'stopped'
+  activePage.value = 'taskDetail'
+}
+
 async function loadAbout() {
   try {
     about.value = await api.getAbout()
   } catch {
-    about.value = { panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc' }
+    about.value = { panelVersion: '-', aria2Version: '-', rpcPath: '/jsonrpc', httpRpcUrl: '/jsonrpc', wsRpcUrl: '/jsonrpc', mcpHttpUrl: '/mcp', mcpEnabled: true, panelRpcSecret: '-' }
   }
 }
 
@@ -99,6 +153,40 @@ async function taskAction(method: string, gid: string) {
     await refresh()
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '操作失败。'
+  }
+}
+
+async function restartTask(gid: string) {
+  try {
+    const result = await api.restartTask(gid)
+    await refresh()
+    activePage.value = 'tasks'
+    const all = [...active.value, ...waiting.value, ...stopped.value]
+    const next = all.find((task) => task.gid === result.gid)
+    if (next) {
+      selected.value = next
+      bucket.value = next.status === 'waiting' ? 'waiting' : next.status === 'active' ? 'active' : 'stopped'
+    } else {
+      bucket.value = 'active'
+    }
+    error.value = ''
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '任务重新开始失败。'
+  }
+}
+
+async function removeTask(gid: string) {
+  try {
+    const result = await api.removeTask(gid)
+    await refresh()
+    const deletedCount = result.deletedPaths?.length || 0
+    if (deletedCount > 0) {
+      error.value = `任务已移除，${deletedCount} 个文件已删除。`
+    } else {
+      error.value = ''
+    }
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '任务移除失败。'
   }
 }
 
@@ -124,6 +212,10 @@ async function logout() {
   await api.logout()
   emit('loggedOut')
 }
+
+function handleSettingsSaved(nextRefreshIntervalMs: number) {
+  applyRefreshInterval(nextRefreshIntervalMs)
+}
 </script>
 
 <template>
@@ -139,11 +231,20 @@ async function logout() {
           <button :class="{ active: activePage === 'overview' }" @click="activePage = 'overview'">
             <Gauge :size="16" /> 总览
           </button>
-          <button :class="{ active: activePage === 'tasks' }" @click="activePage = 'tasks'">
-            <ListTree :size="16" /> 任务列表
-          </button>
           <button :class="{ active: activePage === 'add' }" @click="activePage = 'add'">
             <Plus :size="16" /> 新建任务
+          </button>
+          <button :class="{ active: activePage === 'tasks' || activePage === 'taskDetail' }" @click="activePage = 'tasks'">
+            <ListTree :size="16" /> 任务列表
+          </button>
+          <button :class="{ active: activePage === 'peerGuard' }" @click="activePage = 'peerGuard'">
+            <Shield :size="16" /> 节点防护
+          </button>
+          <button :class="{ active: activePage === 'connection' }" @click="activePage = 'connection'">
+            <Info :size="16" /> 连接信息
+          </button>
+          <button :class="{ active: activePage === 'mcp' }" @click="activePage = 'mcp'">
+            <Blocks :size="16" /> MCP
           </button>
           <button :class="{ active: activePage === 'options' }" @click="activePage = 'options'">
             <SlidersHorizontal :size="16" /> Aria2
@@ -153,16 +254,10 @@ async function logout() {
           </button>
         </nav>
       </div>
-      <div class="user-card">
-        <div class="user-card-head">
-          <span class="avatar">A</span>
-          <div class="user-meta">
-            <strong>admin</strong>
-            <small>管理员会话</small>
-          </div>
-        </div>
-        <button class="ghost logout" @click="logout">
-          <LogOut :size="16" /> 退出登录
+      <div class="account-strip">
+        <span class="account-name">admin</span>
+        <button class="ghost logout logout-inline" @click="logout">
+          <LogOut :size="15" /> 退出
         </button>
       </div>
     </aside>
@@ -177,6 +272,9 @@ async function logout() {
           <span class="badge">
             {{ currentPageMeta.badge }} {{ currentBucketCount }}
           </span>
+          <button v-if="activePage === 'taskDetail'" class="ghost" @click="activePage = 'tasks'">
+            <ArrowLeft :size="15" /> 返回列表
+          </button>
           <button class="primary" @click="refresh">
             刷新
           </button>
@@ -226,75 +324,103 @@ async function logout() {
             <TaskList
               :tasks="allTasks.slice(0, 8)"
               :selected-gid="selected?.gid"
-              @select="selected = $event; activePage = 'tasks'"
+              @select="openTask"
               @action="taskAction"
               @move="taskMove"
+              @restart="restartTask"
+              @remove="removeTask"
             />
           </section>
         </section>
 
-        <section v-else-if="activePage === 'tasks'" class="tasks-page">
-          <section class="panel queue-panel">
-            <div class="queue-head">
-              <div class="section-title">
-                <Activity :size="17" />
-                <span>任务队列</span>
+        <section v-else-if="activePage === 'tasks'" class="page-shell">
+          <section class="tasks-page">
+            <section class="panel queue-panel">
+              <div class="queue-head">
+                <div class="section-title">
+                  <Activity :size="17" />
+                  <span>任务队列</span>
+                </div>
+                <div class="segmented">
+                  <button :class="{ active: bucket === 'active' }" @click="bucket = 'active'">
+                    活动
+                  </button>
+                  <button :class="{ active: bucket === 'waiting' }" @click="bucket = 'waiting'">
+                    等待
+                  </button>
+                  <button :class="{ active: bucket === 'stopped' }" @click="bucket = 'stopped'">
+                    历史
+                  </button>
+                </div>
               </div>
-              <div class="segmented">
-                <button :class="{ active: bucket === 'active' }" @click="bucket = 'active'">
-                  活动
+              <div class="queue-toolbar">
+                <label class="search-box">
+                  <Search :size="15" />
+                  <input v-model="query" placeholder="搜索名称、GID、目录、状态">
+                </label>
+                <select v-model="sortBy">
+                  <option value="name">
+                    按名称
+                  </option>
+                  <option value="progress">
+                    按进度
+                  </option>
+                  <option value="speed">
+                    按速度
+                  </option>
+                  <option value="size">
+                    按大小
+                  </option>
+                </select>
+              </div>
+              <div class="bulk-actions">
+                <button class="ghost" @click="globalAction('aria2.pauseAll')">
+                  <Pause :size="15" /> 暂停全部
                 </button>
-                <button :class="{ active: bucket === 'waiting' }" @click="bucket = 'waiting'">
-                  等待
+                <button class="ghost" @click="globalAction('aria2.unpauseAll')">
+                  <Play :size="15" /> 继续全部
                 </button>
-                <button :class="{ active: bucket === 'stopped' }" @click="bucket = 'stopped'">
-                  历史
+                <button class="ghost" @click="globalAction('aria2.purgeDownloadResult')">
+                  <Eraser :size="15" /> 清理结果
+                </button>
+                <button class="ghost" @click="globalAction('aria2.saveSession')">
+                  <Save :size="15" /> 保存会话
                 </button>
               </div>
-            </div>
-            <div class="queue-toolbar">
-              <label class="search-box">
-                <Search :size="15" />
-                <input v-model="query" placeholder="搜索名称、GID、目录、状态">
-              </label>
-              <select v-model="sortBy">
-                <option value="name">
-                  按名称
-                </option>
-                <option value="progress">
-                  按进度
-                </option>
-                <option value="speed">
-                  按速度
-                </option>
-                <option value="size">
-                  按大小
-                </option>
-              </select>
-            </div>
-            <div class="bulk-actions">
-              <button class="ghost" @click="globalAction('aria2.pauseAll')">
-                <Pause :size="15" /> 暂停全部
-              </button>
-              <button class="ghost" @click="globalAction('aria2.unpauseAll')">
-                <Play :size="15" /> 继续全部
-              </button>
-              <button class="ghost" @click="globalAction('aria2.purgeDownloadResult')">
-                <Eraser :size="15" /> 清理结果
-              </button>
-              <button class="ghost" @click="globalAction('aria2.saveSession')">
-                <Save :size="15" /> 保存会话
-              </button>
-            </div>
-            <TaskList :tasks="visibleTasks" :selected-gid="selected?.gid" @select="selected = $event" @action="taskAction" @move="taskMove" />
+              <TaskList
+                :tasks="visibleTasks"
+                :selected-gid="selected?.gid"
+                @select="openTask"
+                @action="taskAction"
+                @move="taskMove"
+                @restart="restartTask"
+                @remove="removeTask"
+              />
+            </section>
           </section>
-
+        </section>
+        <section v-else-if="activePage === 'taskDetail'" class="page-shell">
           <TaskDetail :task="selected" @changed="refresh" />
         </section>
 
-        <AddTaskPanel v-else-if="activePage === 'add'" @created="refresh" />
-        <Aria2OptionsPanel v-else-if="activePage === 'options'" />
-        <SettingsPanel v-else />
+        <section v-else-if="activePage === 'add'" class="page-shell">
+          <AddTaskPanel @created="refresh" />
+        </section>
+        <section v-else-if="activePage === 'options'" class="page-shell">
+          <Aria2OptionsPanel />
+        </section>
+        <section v-else-if="activePage === 'peerGuard'" class="page-shell">
+          <PeerGuardPanel />
+        </section>
+        <section v-else-if="activePage === 'connection'" class="page-shell">
+          <ConnectionInfoPanel />
+        </section>
+        <section v-else-if="activePage === 'mcp'" class="page-shell">
+          <MCPPanel />
+        </section>
+        <section v-else class="page-shell">
+          <SettingsPanel @saved="handleSettingsSaved" />
+        </section>
       </section>
     </section>
   </main>

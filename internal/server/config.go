@@ -13,9 +13,10 @@ import (
 )
 
 type Config struct {
-	Admin AdminConfig `json:"admin"`
-	Aria2 Aria2Config `json:"aria2"`
-	Panel PanelConfig `json:"panel"`
+	Admin     AdminConfig     `json:"admin"`
+	Aria2     Aria2Config     `json:"aria2"`
+	Panel     PanelConfig     `json:"panel"`
+	PeerGuard PeerGuardConfig `json:"peerGuard,omitempty"`
 }
 
 type AdminConfig struct {
@@ -38,7 +39,22 @@ type PanelConfig struct {
 	RefreshIntervalMs  int    `json:"refreshIntervalMs"`
 	DefaultDownloadDir string `json:"defaultDownloadDir"`
 	SessionTTLSeconds  int    `json:"sessionTTLSeconds"`
+	RPCSecret          string `json:"rpcSecret,omitempty"`
+	MCPEnabled         bool   `json:"mcpEnabled"`
 	Theme              string `json:"theme"`
+	ColorMode          string `json:"colorMode,omitempty"`
+}
+
+type PeerGuardConfig struct {
+	AutoBanEnabled  bool            `json:"autoBanEnabled"`
+	AutoBanMinScore int             `json:"autoBanMinScore,omitempty"`
+	BlockedPeers    []PeerBanRecord `json:"blockedPeers,omitempty"`
+}
+
+type PeerBanRecord struct {
+	IP        string `json:"ip"`
+	Reason    string `json:"reason,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
 }
 
 const defaultManagedRPCPort = 16800
@@ -50,11 +66,14 @@ func LoadConfig(path string) (*Config, error) {
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			return nil, fmt.Errorf("parse config: %w", err)
 		}
+		if !panelConfigHasField(data, "mcpEnabled") {
+			cfg.Panel.MCPEnabled = true
+		}
 		mutated, err := ensureManagedConfigDefaults(&cfg)
 		if err != nil {
 			return nil, err
 		}
-		normalizeConfig(&cfg)
+		mutated = normalizeConfig(&cfg) || mutated
 		if mutated {
 			if err := SaveConfig(path, &cfg); err != nil {
 				return nil, err
@@ -87,7 +106,9 @@ func LoadConfig(path string) (*Config, error) {
 		Panel: PanelConfig{
 			RefreshIntervalMs: 1500,
 			SessionTTLSeconds: 86400,
-			Theme:             "design",
+			MCPEnabled:        true,
+			Theme:             "ariamx",
+			ColorMode:         "light",
 		},
 	}
 	if rpcURL := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_RPC")); rpcURL != "" {
@@ -96,6 +117,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if secret := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_SECRET")); secret != "" {
 		cfg.Aria2.RPCSecret = secret
+	}
+	if secret := strings.TrimSpace(os.Getenv("ARIAMX_PANEL_RPC_SECRET")); secret != "" {
+		cfg.Panel.RPCSecret = secret
 	}
 	if cfg.Aria2.Managed {
 		if cfg.Aria2.RPCSecret == "" {
@@ -106,6 +130,19 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.Aria2.RPCSecret = secret
 		}
 		cfg.Aria2.RPCURL = managedRPCURL(cfg.Aria2.ManagedRPCPort)
+	}
+	if strings.TrimSpace(cfg.Panel.RPCSecret) == "" || cfg.Panel.RPCSecret == cfg.Aria2.RPCSecret {
+		secret, err := randomHex(24)
+		if err != nil {
+			return nil, err
+		}
+		for secret == cfg.Aria2.RPCSecret {
+			secret, err = randomHex(24)
+			if err != nil {
+				return nil, err
+			}
+		}
+		cfg.Panel.RPCSecret = secret
 	}
 	if err := SaveConfig(path, cfg); err != nil {
 		return nil, err
@@ -132,27 +169,65 @@ func SaveConfig(path string, cfg *Config) error {
 	return os.Rename(tmp, path)
 }
 
-func normalizeConfig(cfg *Config) {
+func normalizeConfig(cfg *Config) bool {
+	mutated := false
 	if cfg.Admin.Username == "" {
 		cfg.Admin.Username = "admin"
+		mutated = true
 	}
 	if cfg.Aria2.ManagedRPCPort <= 0 {
 		cfg.Aria2.ManagedRPCPort = defaultManagedRPCPort
+		mutated = true
 	}
 	if cfg.Aria2.Managed {
-		cfg.Aria2.RPCURL = managedRPCURL(cfg.Aria2.ManagedRPCPort)
+		rpcURL := managedRPCURL(cfg.Aria2.ManagedRPCPort)
+		if cfg.Aria2.RPCURL != rpcURL {
+			cfg.Aria2.RPCURL = rpcURL
+			mutated = true
+		}
 	} else if cfg.Aria2.RPCURL == "" {
 		cfg.Aria2.RPCURL = "http://127.0.0.1:6800/jsonrpc"
+		mutated = true
 	}
 	if cfg.Panel.RefreshIntervalMs <= 0 {
 		cfg.Panel.RefreshIntervalMs = 1500
+		mutated = true
 	}
 	if cfg.Panel.SessionTTLSeconds <= 0 {
 		cfg.Panel.SessionTTLSeconds = 86400
+		mutated = true
 	}
-	if cfg.Panel.Theme != "classic" && cfg.Panel.Theme != "design" {
-		cfg.Panel.Theme = "design"
+	legacyTheme := strings.TrimSpace(cfg.Panel.Theme)
+	if cfg.Panel.ColorMode != "light" && cfg.Panel.ColorMode != "dark" && cfg.Panel.ColorMode != "system" {
+		if legacyTheme == "classic" {
+			cfg.Panel.ColorMode = "dark"
+		} else {
+			cfg.Panel.ColorMode = "light"
+		}
+		mutated = true
 	}
+	if legacyTheme != "ariamx" {
+		cfg.Panel.Theme = "ariamx"
+		mutated = true
+	}
+	normalizedPeers := normalizePeerBanRecords(cfg.PeerGuard.BlockedPeers)
+	if len(normalizedPeers) != len(cfg.PeerGuard.BlockedPeers) {
+		cfg.PeerGuard.BlockedPeers = normalizedPeers
+		mutated = true
+	} else {
+		for index := range normalizedPeers {
+			if normalizedPeers[index] != cfg.PeerGuard.BlockedPeers[index] {
+				cfg.PeerGuard.BlockedPeers = normalizedPeers
+				mutated = true
+				break
+			}
+		}
+	}
+	if cfg.PeerGuard.AutoBanMinScore <= 0 {
+		cfg.PeerGuard.AutoBanMinScore = 3
+		mutated = true
+	}
+	return mutated
 }
 
 func ensureManagedConfigDefaults(cfg *Config) (bool, error) {
@@ -198,7 +273,60 @@ func ensureManagedConfigDefaults(cfg *Config) (bool, error) {
 			mutated = true
 		}
 	}
+	if strings.TrimSpace(cfg.Panel.RPCSecret) == "" || cfg.Panel.RPCSecret == cfg.Aria2.RPCSecret {
+		secret, err := randomHex(24)
+		if err != nil {
+			return false, err
+		}
+		for secret == cfg.Aria2.RPCSecret {
+			secret, err = randomHex(24)
+			if err != nil {
+				return false, err
+			}
+		}
+		cfg.Panel.RPCSecret = secret
+		mutated = true
+	}
 	return mutated, nil
+}
+
+func normalizePeerBanRecords(records []PeerBanRecord) []PeerBanRecord {
+	if len(records) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	normalized := make([]PeerBanRecord, 0, len(records))
+	for _, record := range records {
+		record.IP = strings.TrimSpace(record.IP)
+		record.Reason = strings.TrimSpace(record.Reason)
+		record.CreatedAt = strings.TrimSpace(record.CreatedAt)
+		if record.IP == "" {
+			continue
+		}
+		if _, ok := seen[record.IP]; ok {
+			continue
+		}
+		seen[record.IP] = struct{}{}
+		normalized = append(normalized, record)
+	}
+	return normalized
+}
+
+func panelConfigHasField(data []byte, field string) bool {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	panelRaw, ok := raw["panel"]
+	if !ok {
+		return false
+	}
+	var panel map[string]json.RawMessage
+	if err := json.Unmarshal(panelRaw, &panel); err != nil {
+		return false
+	}
+	_, ok = panel[field]
+	return ok
 }
 
 func managedRPCURL(port int) string {

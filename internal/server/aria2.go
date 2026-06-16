@@ -87,7 +87,7 @@ func (c *Aria2Client) Call(req Aria2CallRequest) (interface{}, error) {
 	return decoded.Result, nil
 }
 
-func (c *Aria2Client) AddTorrent(r io.Reader) (interface{}, error) {
+func (c *Aria2Client) AddTorrent(r io.Reader, options map[string]string) (interface{}, error) {
 	data, err := io.ReadAll(io.LimitReader(r, 32<<20))
 	if err != nil {
 		return nil, err
@@ -96,9 +96,13 @@ func (c *Aria2Client) AddTorrent(r io.Reader) (interface{}, error) {
 		return nil, errors.New("empty torrent file")
 	}
 	encoded := base64.StdEncoding.EncodeToString(data)
+	params := []interface{}{encoded}
+	if len(options) > 0 {
+		params = append(params, []string{}, options)
+	}
 	return c.Call(Aria2CallRequest{
 		Method: "aria2.addTorrent",
-		Params: []interface{}{encoded},
+		Params: params,
 	})
 }
 

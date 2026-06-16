@@ -25,6 +25,11 @@ Completion report:
 - Before finishing each task, decide whether the changes affect `README.md` usage, setup, behavior, configuration, screenshots, or documented workflows; if they do, update `README.md` in the same task.
 - In the final response, briefly state what was completed, whether `AI_PROJECT.md` was updated, whether cleanup was performed, and whether validation or tests were run.
 
+Runtime visibility policy:
+- By default, always run and verify the latest version of the current workspace code for the user.
+- When starting, switching, or refreshing a local service, ensure it is launched from the current workspace source, not an older built binary or stale process.
+- After any code change that affects visible behavior, restart or reload the running service as needed, then verify against that latest running instance so the user can immediately see the newest behavior.
+
 Database change policy:
 - When making SQL, schema, data migration, index, view, stored procedure, seed data, or configuration-table changes, provide a corresponding change document.
 - The change document should briefly describe the purpose, scope, affected tables/columns/indexes, execution order, rollback plan, validation method, and risks.

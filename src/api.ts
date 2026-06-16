@@ -1,4 +1,13 @@
-import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult } from './types'
+import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot } from './types'
+
+class AuthRedirectError extends Error {
+  constructor() {
+    super('')
+    this.name = 'AuthRedirectError'
+  }
+}
+
+let authRedirecting = false
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -6,6 +15,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...init,
   })
+  if (response.status === 401) {
+    if (!authRedirecting && window.location.pathname !== '/login') {
+      authRedirecting = true
+      window.location.replace('/login')
+    }
+    throw new AuthRedirectError()
+  }
   const payload = (await response.json()) as ApiResponse<T>
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error?.message || '请求失败，请稍后重试。')
@@ -44,6 +60,18 @@ export const api = {
       body: JSON.stringify({ method, params }),
     })
   },
+  restartTask(gid: string) {
+    return request<{ gid: string }>('/api/aria2/restart', {
+      method: 'POST',
+      body: JSON.stringify({ gid }),
+    })
+  },
+  removeTask(gid: string) {
+    return request<{ deletedPaths?: string[] }>('/api/aria2/remove', {
+      method: 'POST',
+      body: JSON.stringify({ gid }),
+    })
+  },
   saveManagedAria2Options(patch: Record<string, string>) {
     return request<ManagedOptionsSaveResult>('/api/aria2/options', {
       method: 'POST',
@@ -55,12 +83,38 @@ export const api = {
       method: 'POST',
     })
   },
-  uploadTorrent(file: File) {
+  uploadTorrent(file: File, options?: Record<string, string>) {
     const data = new FormData()
     data.set('torrent', file)
+    Object.entries(options || {}).forEach(([key, value]) => {
+      if (value !== '') {
+        data.append(key, value)
+      }
+    })
     return request<string>('/api/aria2/upload-torrent', {
       method: 'POST',
       body: data,
+    })
+  },
+  getPeerGuard() {
+    return request<PeerGuardSnapshot>('/api/peer-guard')
+  },
+  updatePeerGuardSettings(autoBanEnabled: boolean) {
+    return request<PeerGuardSnapshot>('/api/peer-guard/settings', {
+      method: 'POST',
+      body: JSON.stringify({ autoBanEnabled }),
+    })
+  },
+  banPeer(ip: string, reason = '') {
+    return request<PeerGuardSnapshot>('/api/peer-guard/ban', {
+      method: 'POST',
+      body: JSON.stringify({ ip, reason }),
+    })
+  },
+  unbanPeer(ip: string) {
+    return request<PeerGuardSnapshot>('/api/peer-guard/unban', {
+      method: 'POST',
+      body: JSON.stringify({ ip }),
     })
   },
 }

@@ -14,10 +14,24 @@ const downloadLimit = ref('')
 const seedRatio = ref('')
 const seedTime = ref('')
 const headers = ref('')
-const paused = ref(false)
 const loading = ref(false)
 const message = ref('')
+const uploading = ref(false)
 const torrentInput = ref<HTMLInputElement | null>(null)
+
+function buildOptions() {
+  const options: Record<string, string> = {}
+  if (dir.value) options.dir = dir.value
+  if (out.value) options.out = out.value
+  if (split.value) options.split = String(split.value)
+  if (maxConnection.value) options.maxConnectionPerServer = String(maxConnection.value)
+  if (downloadLimit.value) options.downloadLimit = downloadLimit.value
+  if (seedRatio.value) options.seedRatio = seedRatio.value
+  if (seedTime.value) options.seedTime = seedTime.value
+  const headerLines = headers.value.split('\n').map((item) => item.trim()).filter(Boolean)
+  if (headerLines.length > 0) options.header = headerLines.join('\n')
+  return { options, headerLines }
+}
 
 async function submitLinks() {
   const urls = links.value.split('\n').map((item) => item.trim()).filter(Boolean)
@@ -28,18 +42,8 @@ async function submitLinks() {
   loading.value = true
   message.value = ''
   try {
+    const { options } = buildOptions()
     for (const url of urls) {
-      const options: Record<string, string> = {}
-      if (dir.value) options.dir = dir.value
-      if (out.value) options.out = out.value
-      if (split.value) options.split = String(split.value)
-      if (maxConnection.value) options['max-connection-per-server'] = String(maxConnection.value)
-      if (downloadLimit.value) options['max-download-limit'] = downloadLimit.value
-      if (seedRatio.value) options['seed-ratio'] = seedRatio.value
-      if (seedTime.value) options['seed-time'] = seedTime.value
-      if (paused.value) options.pause = 'true'
-      const headerLines = headers.value.split('\n').map((item) => item.trim()).filter(Boolean)
-      if (headerLines.length > 0) options.header = headerLines.join('\n')
       await api.aria2<string>('aria2.addUri', [[url], options])
     }
     links.value = ''
@@ -56,15 +60,18 @@ async function uploadTorrent(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
   loading.value = true
-  message.value = ''
+  uploading.value = true
+  message.value = `正在上传种子：${file.name}`
   try {
-    await api.uploadTorrent(file)
+    const { options } = buildOptions()
+    await api.uploadTorrent(file, options)
     message.value = '种子任务已提交。'
     emit('created')
   } catch (error) {
     message.value = error instanceof Error ? error.message : '种子上传失败。'
   } finally {
     loading.value = false
+    uploading.value = false
     if (torrentInput.value) torrentInput.value.value = ''
   }
 }
@@ -106,10 +113,6 @@ async function uploadTorrent(event: Event) {
         <span>做种时间</span>
         <input v-model="seedTime" placeholder="分钟，BT 任务">
       </label>
-      <label class="check-line">
-        <input v-model="paused" type="checkbox">
-        <span>创建后暂停</span>
-      </label>
     </div>
     <label>
       <span>请求 Header</span>
@@ -119,10 +122,10 @@ async function uploadTorrent(event: Event) {
       <button class="primary" :disabled="loading" @click="submitLinks">
         提交链接
       </button>
-      <label class="ghost upload-button">
+      <label class="ghost upload-button" :class="{ disabled: loading }">
         <Upload :size="15" />
-        上传种子
-        <input ref="torrentInput" type="file" accept=".torrent" @change="uploadTorrent">
+        {{ uploading ? '上传中...' : '上传种子' }}
+        <input ref="torrentInput" type="file" accept=".torrent" :disabled="loading" @change="uploadTorrent">
       </label>
     </div>
     <p v-if="message" class="hint">

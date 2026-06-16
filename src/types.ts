@@ -17,20 +17,59 @@ export type AppConfig = {
   hasAria2Secret: boolean
   aria2Managed: boolean
   managedRpcPort: number
+  mcpEnabled: boolean
   refreshIntervalMs: number
   defaultDownloadDir: string
-  theme: 'classic' | 'design'
+  theme: 'ariamx'
+  colorMode: 'system' | 'light' | 'dark'
 }
 
 export type AppAbout = {
   panelVersion: string
   aria2Version: string
   rpcPath: string
+  httpRpcUrl: string
+  wsRpcUrl: string
+  mcpHttpUrl: string
+  mcpEnabled: boolean
+  panelRpcSecret: string
 }
 
 export type ManagedOptionsSaveResult = {
   restarted: boolean
   message: string
+}
+
+export type PeerBanRecord = {
+  ip: string
+  reason?: string
+  createdAt?: string
+}
+
+export type SuspiciousPeer = {
+  gid: string
+  taskName: string
+  ip: string
+  port: string
+  downloadSpeed: string
+  uploadSpeed: string
+  seeder: boolean
+  blocked: boolean
+  score: number
+  reason: string
+}
+
+export type PeerGuardSnapshot = {
+  firewallMode: string
+  firewallReady: boolean
+  firewallOperable: boolean
+  actionBlockedReason?: string
+  lastError?: string
+  lastAppliedAt?: string
+  autoBanEnabled: boolean
+  autoBanMinScore: number
+  blockedPeers: PeerBanRecord[]
+  suspiciousPeers: SuspiciousPeer[]
 }
 
 export type Aria2File = {

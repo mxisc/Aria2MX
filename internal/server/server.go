@@ -21,13 +21,16 @@ type Options struct {
 }
 
 type Server struct {
-	configPath string
-	cfg        *Config
-	cfgMu      sync.RWMutex
-	sessions   *SessionStore
-	aria2      *Aria2Client
-	managed    *ManagedAria2
-	assets     embed.FS
+	configPath    string
+	cfg           *Config
+	cfgMu         sync.RWMutex
+	sessions      *SessionStore
+	aria2         *Aria2Client
+	managed       *ManagedAria2
+	assets        embed.FS
+	peerGuard     peerGuardRuntime
+	peerGuardStop chan struct{}
+	peerGuardDone chan struct{}
 }
 
 type apiResponse struct {
@@ -59,7 +62,19 @@ func New(opts Options) (*Server, error) {
 			return nil, err
 		}
 	}
+	s.startPeerGuardLoop()
+	if len(s.cfg.PeerGuard.BlockedPeers) > 0 {
+		_ = s.applyPeerGuardFirewall(nil, s.cfg.PeerGuard.BlockedPeers)
+	}
 	return s, nil
+}
+
+func (s *Server) Close() error {
+	s.stopPeerGuardLoop()
+	if s.managed == nil {
+		return nil
+	}
+	return s.managed.Stop()
 }
 
 func (s *Server) Routes() http.Handler {
@@ -72,8 +87,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/aria2/options", s.withAuth(s.handleAria2Options))
 	mux.HandleFunc("/api/aria2/options/reset", s.withAuth(s.handleAria2OptionsReset))
 	mux.HandleFunc("/api/aria2/call", s.withAuth(s.handleAria2Call))
+	mux.HandleFunc("/api/aria2/restart", s.withAuth(s.handleAria2Restart))
+	mux.HandleFunc("/api/aria2/remove", s.withAuth(s.handleAria2Remove))
 	mux.HandleFunc("/api/aria2/upload-torrent", s.withAuth(s.handleTorrentUpload))
-	mux.HandleFunc("/jsonrpc", s.withAuth(s.handlePanelRPC))
+	mux.HandleFunc("/api/peer-guard", s.withAuth(s.handlePeerGuard))
+	mux.HandleFunc("/api/peer-guard/ban", s.withAuth(s.handlePeerGuardBan))
+	mux.HandleFunc("/api/peer-guard/unban", s.withAuth(s.handlePeerGuardUnban))
+	mux.HandleFunc("/api/peer-guard/settings", s.withAuth(s.handlePeerGuardSettings))
+	mux.HandleFunc("/jsonrpc", s.handlePanelRPC)
+	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/", s.handleStatic)
 	return securityHeaders(mux)
@@ -154,11 +176,44 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	httpURL, wsURL, mcpURL := publicPanelRPCURLs(r)
+	s.cfgMu.RLock()
+	panelRPCSecret := s.cfg.Panel.RPCSecret
+	mcpEnabled := s.cfg.Panel.MCPEnabled
+	s.cfgMu.RUnlock()
+	if !mcpEnabled {
+		mcpURL = ""
+	}
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: map[string]interface{}{
-		"panelVersion": version.PanelVersion,
-		"aria2Version": aria2Version,
-		"rpcPath":      "/jsonrpc",
+		"panelVersion":   version.PanelVersion,
+		"aria2Version":   aria2Version,
+		"rpcPath":        "/jsonrpc",
+		"httpRpcUrl":     httpURL,
+		"wsRpcUrl":       wsURL,
+		"mcpHttpUrl":     mcpURL,
+		"mcpEnabled":     mcpEnabled,
+		"panelRpcSecret": panelRPCSecret,
 	}})
+}
+
+func publicPanelRPCURLs(r *http.Request) (string, string, string) {
+	host := r.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		scheme = strings.TrimSpace(parts[0])
+	}
+	wsScheme := "ws"
+	if scheme == "https" {
+		wsScheme = "wss"
+	}
+	return scheme + "://" + host + "/jsonrpc", wsScheme + "://" + host + "/jsonrpc", scheme + "://" + host + "/mcp"
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -171,9 +226,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			"hasAria2Secret":     cfg.Aria2.RPCSecret != "",
 			"aria2Managed":       cfg.Aria2.Managed,
 			"managedRpcPort":     cfg.Aria2.ManagedRPCPort,
+			"mcpEnabled":         cfg.Panel.MCPEnabled,
 			"refreshIntervalMs":  cfg.Panel.RefreshIntervalMs,
 			"defaultDownloadDir": cfg.Panel.DefaultDownloadDir,
 			"theme":              cfg.Panel.Theme,
+			"colorMode":          cfg.Panel.ColorMode,
 		}
 		s.cfgMu.RUnlock()
 		writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
@@ -183,7 +240,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			Aria2Secret        *string `json:"aria2Secret"`
 			RefreshIntervalMs  *int    `json:"refreshIntervalMs"`
 			DefaultDownloadDir *string `json:"defaultDownloadDir"`
+			MCPEnabled         *bool   `json:"mcpEnabled"`
 			Theme              *string `json:"theme"`
+			ColorMode          *string `json:"colorMode"`
 			NewPassword        *string `json:"newPassword"`
 		}
 		if err := readJSON(r, &payload); err != nil {
@@ -205,8 +264,14 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if payload.DefaultDownloadDir != nil {
 			s.cfg.Panel.DefaultDownloadDir = *payload.DefaultDownloadDir
 		}
-		if payload.Theme != nil && (*payload.Theme == "classic" || *payload.Theme == "design") {
+		if payload.MCPEnabled != nil {
+			s.cfg.Panel.MCPEnabled = *payload.MCPEnabled
+		}
+		if payload.Theme != nil && *payload.Theme == "ariamx" {
 			s.cfg.Panel.Theme = *payload.Theme
+		}
+		if payload.ColorMode != nil && (*payload.ColorMode == "system" || *payload.ColorMode == "light" || *payload.ColorMode == "dark") {
+			s.cfg.Panel.ColorMode = *payload.ColorMode
 		}
 		if payload.NewPassword != nil && len(*payload.NewPassword) >= 6 {
 			salt, err := randomHex(16)
@@ -286,7 +351,47 @@ func (s *Server) handleAria2Call(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.aria2.Call(payload)
 	if err != nil {
-		writeAPIError(w, http.StatusBadGateway, "aria2_failed", "aria2 暂时不可用，请检查连接设置。")
+		writeAPIError(w, http.StatusBadGateway, "aria2_failed", userFacingAria2Error(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
+}
+
+func (s *Server) handleAria2Restart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var payload struct {
+		GID string `json:"gid"`
+	}
+	if err := readJSON(r, &payload); err != nil || payload.GID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查任务后重试。")
+		return
+	}
+	newGID, err := s.restartTask(payload.GID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "aria2_restart_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: map[string]string{"gid": newGID}})
+}
+
+func (s *Server) handleAria2Remove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var payload struct {
+		GID string `json:"gid"`
+	}
+	if err := readJSON(r, &payload); err != nil || payload.GID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查任务后重试。")
+		return
+	}
+	result, err := s.removeTask(payload.GID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "aria2_remove_failed", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
@@ -307,12 +412,49 @@ func (s *Server) handleTorrentUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	result, err := s.aria2.AddTorrent(file)
+	options := torrentOptionsFromForm(r.MultipartForm.Value)
+	result, err := s.aria2.AddTorrent(file, options)
 	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, "aria2_failed", "种子任务创建失败，请检查 aria2 连接设置。")
 		return
 	}
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
+}
+
+func torrentOptionsFromForm(values map[string][]string) map[string]string {
+	options := map[string]string{}
+	copyFormValue(options, values, "dir", "dir")
+	copyFormValue(options, values, "out", "out")
+	copyFormValue(options, values, "split", "split")
+	copyFormValue(options, values, "max-connection-per-server", "maxConnectionPerServer")
+	copyFormValue(options, values, "max-download-limit", "downloadLimit")
+	copyFormValue(options, values, "seed-ratio", "seedRatio")
+	copyFormValue(options, values, "seed-time", "seedTime")
+
+	headerLines := values["header"]
+	headers := make([]string, 0, len(headerLines))
+	for _, header := range headerLines {
+		header = strings.TrimSpace(header)
+		if header != "" {
+			headers = append(headers, header)
+		}
+	}
+	if len(headers) > 0 {
+		options["header"] = strings.Join(headers, "\n")
+	}
+	return options
+}
+
+func copyFormValue(target map[string]string, values map[string][]string, optionKey, formKey string) {
+	formValues := values[formKey]
+	if len(formValues) == 0 {
+		return
+	}
+	value := strings.TrimSpace(formValues[0])
+	if value == "" {
+		return
+	}
+	target[optionKey] = value
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {

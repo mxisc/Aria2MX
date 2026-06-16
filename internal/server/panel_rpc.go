@@ -11,6 +11,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var errPanelRPCUnauthorized = errors.New("请先提供面板 RPC Secret 或登录后重试。")
+
 type panelRPCRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -47,8 +49,9 @@ var panelRPCUpgrader = websocket.Upgrader{
 }
 
 func (s *Server) handlePanelRPC(w http.ResponseWriter, r *http.Request) {
+	outerAuthorized := s.panelRPCOuterAuthorized(r)
 	if websocket.IsWebSocketUpgrade(r) {
-		s.handlePanelRPCWebSocket(w, r)
+		s.handlePanelRPCWebSocket(w, r, outerAuthorized)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -56,7 +59,7 @@ func (s *Server) handlePanelRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, status, err := s.proxyPanelRPCPayload(r.Body)
+	payload, status, err := s.proxyPanelRPCPayload(r.Body, outerAuthorized)
 	if err != nil {
 		writeRawPanelRPCError(w, status, nil, err)
 		return
@@ -66,7 +69,7 @@ func (s *Server) handlePanelRPC(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
-func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request, outerAuthorized bool) {
 	conn, err := panelRPCUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -81,7 +84,7 @@ func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request)
 		if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
 			continue
 		}
-		payload, _, rpcErr := s.proxyPanelRPCPayload(bytes.NewReader(data))
+		payload, _, rpcErr := s.proxyPanelRPCPayload(bytes.NewReader(data), outerAuthorized)
 		if rpcErr != nil {
 			response, marshalErr := json.Marshal(panelRPCResponse{
 				JSONRPC: "2.0",
@@ -107,7 +110,7 @@ func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, error) }) ([]byte, int, error) {
+func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, error) }, outerAuthorized bool) ([]byte, int, error) {
 	raw, err := readLimitedBytes(bodyReader)
 	if err != nil {
 		return nil, http.StatusBadRequest, errors.New("请检查 RPC 请求内容后重试。")
@@ -124,7 +127,7 @@ func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, e
 		}
 		responses := make([]panelRPCResponse, 0, len(requests))
 		for _, req := range requests {
-			response, respond := s.executePanelRPC(req)
+			response, respond := s.executePanelRPC(req, outerAuthorized)
 			if !respond {
 				continue
 			}
@@ -144,7 +147,7 @@ func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, e
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return nil, http.StatusBadRequest, errors.New("请检查 RPC 请求内容后重试。")
 	}
-	response, respond := s.executePanelRPC(req)
+	response, respond := s.executePanelRPC(req, outerAuthorized)
 	if !respond {
 		return nil, http.StatusOK, nil
 	}
@@ -155,7 +158,7 @@ func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, e
 	return payload, http.StatusOK, nil
 }
 
-func (s *Server) executePanelRPC(req panelRPCRequest) (panelRPCResponse, bool) {
+func (s *Server) executePanelRPC(req panelRPCRequest, outerAuthorized bool) (panelRPCResponse, bool) {
 	response := panelRPCResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -164,10 +167,14 @@ func (s *Server) executePanelRPC(req panelRPCRequest) (panelRPCResponse, bool) {
 		response.Error = &panelRPCError{Code: -32600, Message: "请检查 RPC 请求内容后重试。"}
 		return response, len(req.ID) > 0
 	}
+	if !outerAuthorized && !s.matchesPanelRPCParamSecret(req.Params) {
+		response.Error = &panelRPCError{Code: -32001, Message: errPanelRPCUnauthorized.Error()}
+		return response, len(req.ID) > 0
+	}
 
 	result, err := s.aria2.Call(Aria2CallRequest{
 		Method: req.Method,
-		Params: req.Params,
+		Params: sanitizePanelRPCParams(req.Params),
 	})
 	if err != nil {
 		response.Error = &panelRPCError{Code: -32000, Message: "aria2 暂时不可用，请检查连接设置。"}
@@ -175,6 +182,35 @@ func (s *Server) executePanelRPC(req panelRPCRequest) (panelRPCResponse, bool) {
 	}
 	response.Result = result
 	return response, len(req.ID) > 0
+}
+
+func sanitizePanelRPCParams(params []interface{}) []interface{} {
+	if len(params) == 0 {
+		return params
+	}
+	first, ok := params[0].(string)
+	if ok && len(first) > 6 && first[:6] == "token:" {
+		return params[1:]
+	}
+	return params
+}
+
+func (s *Server) panelRPCOuterAuthorized(r *http.Request) bool {
+	if _, ok, _ := s.authenticatedSession(r); ok {
+		return true
+	}
+	return s.matchesPanelRPCSecret(r)
+}
+
+func (s *Server) matchesPanelRPCParamSecret(params []interface{}) bool {
+	if len(params) == 0 {
+		return false
+	}
+	token, ok := params[0].(string)
+	if !ok || len(token) <= 6 || token[:6] != "token:" {
+		return false
+	}
+	return s.matchesPanelRPCSecretValue(token[6:])
 }
 
 func readLimitedBytes(reader interface{ Read([]byte) (int, error) }) ([]byte, error) {

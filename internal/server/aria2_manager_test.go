@@ -1,6 +1,18 @@
 package server
 
-import "testing"
+import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
 
 func TestApplyManagedOptionPatchSyncsRPCPort(t *testing.T) {
 	cfg := &Config{
@@ -45,4 +57,186 @@ func TestApplyManagedOptionPatchRejectsInvalidRPCPort(t *testing.T) {
 	if _, err := applyManagedOptionPatch(cfg, map[string]string{"rpc-listen-port": "abc"}); err == nil {
 		t.Fatal("expected invalid port error")
 	}
+}
+
+func TestApplyManagedOptionPatchNormalizesTrackerList(t *testing.T) {
+	cfg := &Config{
+		Aria2: Aria2Config{
+			Managed:        true,
+			ManagedRPCPort: defaultManagedRPCPort,
+			RPCURL:         managedRPCURL(defaultManagedRPCPort),
+			Options:        map[string]string{},
+		},
+	}
+
+	patch, err := applyManagedOptionPatch(cfg, map[string]string{
+		"bt-tracker": "http://a/announce\nhttp://b/announce\nhttp://a/announce",
+	})
+	if err != nil {
+		t.Fatalf("apply patch: %v", err)
+	}
+
+	want := "http://a/announce,http://b/announce"
+	if got := cfg.Aria2.Options["bt-tracker"]; got != want {
+		t.Fatalf("expected normalized tracker list %q, got %q", want, got)
+	}
+	if got := patch["bt-tracker"]; got != want {
+		t.Fatalf("expected patch tracker list %q, got %q", want, got)
+	}
+}
+
+func TestWriteConfigFileKeepsTrackerListOnSingleLine(t *testing.T) {
+	cfg := &Config{
+		Panel: PanelConfig{
+			DefaultDownloadDir: "/tmp/downloads",
+		},
+	}
+	manager := NewManagedAria2("ariamx.json", cfg, &sync.RWMutex{}, nil)
+	root := t.TempDir()
+
+	confPath, err := manager.writeConfigFile(root, Aria2Config{
+		Options: map[string]string{
+			"bt-tracker": "http://a/announce\nhttp://b/announce",
+		},
+	})
+	if err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	data, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "bt-tracker=http://a/announce,http://b/announce\n") {
+		t.Fatalf("expected single-line bt-tracker entry, got %q", text)
+	}
+	if strings.Contains(text, "\nhttp://b/announce\n") {
+		t.Fatalf("unexpected bare tracker line in config: %q", text)
+	}
+	if _, err := os.Stat(filepath.Join(root, "aria2.conf")); err != nil {
+		t.Fatalf("expected config file to exist: %v", err)
+	}
+}
+
+func TestFindAvailableManagedRPCPortUsesStepTen(t *testing.T) {
+	first, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen first: %v", err)
+	}
+	defer first.Close()
+	basePort := first.Addr().(*net.TCPAddr).Port
+
+	second, err := net.Listen("tcp4", "127.0.0.1:"+strconv.Itoa(basePort+10))
+	if err != nil {
+		t.Fatalf("listen second: %v", err)
+	}
+	defer second.Close()
+
+	port, err := findAvailableManagedRPCPort(basePort, 10)
+	if err != nil {
+		t.Fatalf("find available port: %v", err)
+	}
+	if port != basePort+20 {
+		t.Fatalf("expected stepped port %d, got %d", basePort+20, port)
+	}
+}
+
+func TestCanReuseExistingLocked(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": map[string]interface{}{"version": "1.37.0"},
+		})
+	}))
+	defer server.Close()
+
+	port, err := serverPort(server.URL)
+	if err != nil {
+		t.Fatalf("server port: %v", err)
+	}
+	cfg := &Config{
+		Aria2: Aria2Config{
+			Managed:        true,
+			RPCURL:         server.URL,
+			RPCSecret:      "secret",
+			ManagedRPCPort: port,
+		},
+	}
+	manager := NewManagedAria2("ariamx.json", cfg, &sync.RWMutex{}, NewAria2Client(func() Aria2Config {
+		return cfg.Aria2
+	}))
+
+	if !manager.canReuseExistingLocked() {
+		t.Fatal("expected existing aria2 process to be reusable")
+	}
+}
+
+func TestStopLockedShutsDownReusedProcess(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	shutdownCh := make(chan struct{}, 1)
+	var server *http.Server
+	server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		method, _ := payload["method"].(string)
+		switch method {
+		case "aria2.forceShutdown":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"result": "OK"})
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				_ = server.Close()
+				shutdownCh <- struct{}{}
+			}()
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"result": map[string]interface{}{"version": "1.37.0"},
+			})
+		}
+	})}
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	cfg := &Config{
+		Aria2: Aria2Config{
+			Managed:        true,
+			RPCURL:         "http://127.0.0.1:" + strconv.Itoa(port),
+			RPCSecret:      "secret",
+			ManagedRPCPort: port,
+		},
+	}
+	cfgMu := &sync.RWMutex{}
+	manager := NewManagedAria2("ariamx.json", cfg, cfgMu, NewAria2Client(func() Aria2Config {
+		cfgMu.RLock()
+		defer cfgMu.RUnlock()
+		return cfg.Aria2
+	}))
+	manager.reused = true
+
+	if err := manager.stopLocked(); err != nil {
+		t.Fatalf("stop reused aria2: %v", err)
+	}
+	select {
+	case <-shutdownCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected forceShutdown to close reused aria2 listener")
+	}
+}
+
+func serverPort(rawURL string) (int, error) {
+	_, portText, err := net.SplitHostPort(strings.TrimPrefix(rawURL, "http://"))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(portText)
 }
