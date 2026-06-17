@@ -114,8 +114,71 @@ func TestWriteConfigFileKeepsTrackerListOnSingleLine(t *testing.T) {
 	if strings.Contains(text, "\nhttp://b/announce\n") {
 		t.Fatalf("unexpected bare tracker line in config: %q", text)
 	}
+	if !strings.Contains(text, "disk-cache=64M\n") {
+		t.Fatalf("expected reference default disk-cache in config, got %q", text)
+	}
+	if !strings.Contains(text, "save-session-interval=1\n") {
+		t.Fatalf("expected reference default save-session-interval in config, got %q", text)
+	}
+	if !strings.Contains(text, "auto-save-interval=20\n") {
+		t.Fatalf("expected reference default auto-save-interval in config, got %q", text)
+	}
+	if !strings.Contains(text, "bt-force-encryption=true\n") {
+		t.Fatalf("expected reference default bt-force-encryption in config, got %q", text)
+	}
 	if _, err := os.Stat(filepath.Join(root, "aria2.conf")); err != nil {
 		t.Fatalf("expected config file to exist: %v", err)
+	}
+}
+
+func TestEffectiveManagedOptionsAllowsUserOverride(t *testing.T) {
+	cfg := &Config{
+		Panel: PanelConfig{
+			DefaultDownloadDir: "/tmp/downloads",
+		},
+	}
+	cfgMu := &sync.RWMutex{}
+	manager := NewManagedAria2("ariamx.json", cfg, cfgMu, nil)
+
+	options := manager.effectiveManagedOptions("/tmp/ariamx-data/aria2", Aria2Config{
+		Options: map[string]string{
+			"disk-cache": "32M",
+			"dir":        "/data/custom",
+		},
+	})
+
+	if got := options["disk-cache"]; got != "32M" {
+		t.Fatalf("expected disk-cache override to be preserved, got %q", got)
+	}
+	if got := options["dir"]; got != "/data/custom" {
+		t.Fatalf("expected dir override to be preserved, got %q", got)
+	}
+	if got := options["split"]; got != "64" {
+		t.Fatalf("expected reference default split to exist, got %q", got)
+	}
+}
+
+func TestManagedCACertificatePathUsesExistingSystemBundle(t *testing.T) {
+	cfg := Aria2Config{
+		Options: map[string]string{},
+	}
+	path := managedCACertificatePath(cfg)
+	if path == "" {
+		t.Skip("no known system CA bundle path on this machine")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected detected CA bundle to exist: %v", err)
+	}
+}
+
+func TestManagedCACertificatePathRespectsExplicitConfig(t *testing.T) {
+	cfg := Aria2Config{
+		Options: map[string]string{
+			"ca-certificate": "/custom/ca.pem",
+		},
+	}
+	if path := managedCACertificatePath(cfg); path != "" {
+		t.Fatalf("expected manager not to override explicit ca-certificate, got %q", path)
 	}
 }
 

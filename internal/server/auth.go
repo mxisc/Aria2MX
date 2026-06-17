@@ -13,6 +13,9 @@ import (
 )
 
 const sessionCookieName = "ariamx_session"
+const (
+	passwordSchemeClientSHA256PBKDF2 = "client_sha256_pbkdf2"
+)
 
 type SessionStore struct {
 	mu       sync.Mutex
@@ -65,9 +68,39 @@ func HashPassword(password, salt string) string {
 	return hex.EncodeToString(key)
 }
 
-func VerifyPassword(password, salt, expected string) bool {
-	actual := HashPassword(password, salt)
+func HashPasswordFromClientSHA256(passwordSHA256, salt string) string {
+	return HashPassword(passwordSHA256, salt)
+}
+
+func SHA256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func HashPasswordFromRaw(password, salt string) string {
+	return HashPasswordFromClientSHA256(SHA256Hex(password), salt)
+}
+
+func IsSHA256Hex(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+func VerifyPassword(password, salt, expected, scheme string) bool {
+	actual := HashPasswordByScheme(password, salt, scheme)
 	return subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) == 1
+}
+
+func HashPasswordByScheme(password, salt, scheme string) string {
+	switch scheme {
+	case "", passwordSchemeClientSHA256PBKDF2:
+		return HashPasswordFromClientSHA256(password, salt)
+	default:
+		return ""
+	}
 }
 
 func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, secure bool) {

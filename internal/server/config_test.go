@@ -37,8 +37,17 @@ func TestLoadConfigCreatesDefaultFile(t *testing.T) {
 	if cfg.Panel.Theme != "ariamx" {
 		t.Fatalf("expected default theme ariamx, got %q", cfg.Panel.Theme)
 	}
-	if cfg.Panel.ColorMode != "light" {
-		t.Fatalf("expected default color mode light, got %q", cfg.Panel.ColorMode)
+	if cfg.Panel.ColorMode != "system" {
+		t.Fatalf("expected default color mode system, got %q", cfg.Panel.ColorMode)
+	}
+	if cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeSameOrigin {
+		t.Fatalf("expected default rpc origin check mode same_origin, got %q", cfg.Panel.RPCOriginCheckMode)
+	}
+	if cfg.Admin.PasswordScheme != passwordSchemeClientSHA256PBKDF2 {
+		t.Fatalf("expected default password scheme %q, got %q", passwordSchemeClientSHA256PBKDF2, cfg.Admin.PasswordScheme)
+	}
+	if len(cfg.Panel.RPCOriginWhitelist) != 0 {
+		t.Fatalf("expected empty rpc origin whitelist, got %#v", cfg.Panel.RPCOriginWhitelist)
 	}
 	if !cfg.Panel.MCPEnabled {
 		t.Fatal("expected mcp to be enabled by default")
@@ -52,7 +61,7 @@ func TestLoadConfigCreatesDefaultFile(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected config file: %v", err)
 	}
-	if !VerifyPassword("change-me", cfg.Admin.PasswordSalt, cfg.Admin.PasswordHash) {
+	if !VerifyPassword(SHA256Hex("change-me"), cfg.Admin.PasswordSalt, cfg.Admin.PasswordHash, cfg.Admin.PasswordScheme) {
 		t.Fatal("expected configured password to verify")
 	}
 }
@@ -99,8 +108,8 @@ func TestLoadConfigMigratesManagedRPCPortFromOptions(t *testing.T) {
 	if cfg.Panel.Theme != "ariamx" {
 		t.Fatalf("expected migrated theme ariamx, got %q", cfg.Panel.Theme)
 	}
-	if cfg.Panel.ColorMode != "light" {
-		t.Fatalf("expected migrated color mode light, got %q", cfg.Panel.ColorMode)
+	if cfg.Panel.ColorMode != "system" {
+		t.Fatalf("expected migrated color mode system, got %q", cfg.Panel.ColorMode)
 	}
 }
 
@@ -130,8 +139,8 @@ func TestLoadConfigMigratesClassicThemeToDarkMode(t *testing.T) {
 	if cfg.Panel.Theme != "ariamx" {
 		t.Fatalf("expected migrated theme ariamx, got %q", cfg.Panel.Theme)
 	}
-	if cfg.Panel.ColorMode != "dark" {
-		t.Fatalf("expected migrated color mode dark, got %q", cfg.Panel.ColorMode)
+	if cfg.Panel.ColorMode != "system" {
+		t.Fatalf("expected migrated color mode system, got %q", cfg.Panel.ColorMode)
 	}
 }
 
@@ -225,6 +234,79 @@ func TestLoadConfigKeepsDisabledMCP(t *testing.T) {
 	}
 	if cfg.Panel.MCPEnabled {
 		t.Fatal("expected disabled mcp to be preserved")
+	}
+}
+
+func TestLoadConfigDropsUnsupportedTrackerSubscriptionSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ariamx.json")
+	if err := os.WriteFile(path, []byte(`{
+  "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
+  "aria2": {
+    "managed": true,
+    "rpcUrl": "http://127.0.0.1:16800/jsonrpc",
+    "rpcSecret": "secret",
+    "managedRpcPort": 16800
+  },
+  "panel": {
+    "refreshIntervalMs": 1500,
+    "sessionTTLSeconds": 86400,
+    "theme": "ariamx",
+    "colorMode": "light",
+    "trackerSubscriptionEnabled": true,
+    "trackerSubscriptionSource": "invalid-source"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Panel.TrackerSubscriptionEnabled {
+		t.Fatal("expected unsupported tracker subscription to be disabled")
+	}
+	if cfg.Panel.TrackerSubscriptionSource != "" {
+		t.Fatalf("expected tracker subscription source cleared, got %q", cfg.Panel.TrackerSubscriptionSource)
+	}
+}
+
+func TestLoadConfigKeepsRPCOriginSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ariamx.json")
+	if err := os.WriteFile(path, []byte(`{
+  "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
+  "aria2": {
+    "managed": true,
+    "rpcUrl": "http://127.0.0.1:16800/jsonrpc",
+    "rpcSecret": "secret",
+    "managedRpcPort": 16800
+  },
+  "panel": {
+    "refreshIntervalMs": 1500,
+    "sessionTTLSeconds": 86400,
+    "rpcSecret": "panel-secret",
+    "rpcOriginCheckMode": "whitelist",
+    "rpcOriginWhitelist": ["ariang.example.com", "https://panel.example.com", "ariang.example.com", "  "],
+    "mcpEnabled": true,
+    "theme": "ariamx",
+    "colorMode": "light"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeWhitelist {
+		t.Fatalf("expected whitelist origin mode, got %q", cfg.Panel.RPCOriginCheckMode)
+	}
+	if len(cfg.Panel.RPCOriginWhitelist) != 2 {
+		t.Fatalf("expected normalized whitelist length 2, got %#v", cfg.Panel.RPCOriginWhitelist)
+	}
+	if cfg.Panel.RPCOriginWhitelist[0] != "ariang.example.com" || cfg.Panel.RPCOriginWhitelist[1] != "panel.example.com" {
+		t.Fatalf("unexpected normalized whitelist %#v", cfg.Panel.RPCOriginWhitelist)
 	}
 }
 

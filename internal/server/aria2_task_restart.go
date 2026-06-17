@@ -24,7 +24,7 @@ func userFacingAria2Error(err error) string {
 		detail := strings.TrimPrefix(text, "aria2 error ")
 		parts := strings.SplitN(detail, ": ", 2)
 		if len(parts) == 2 {
-			return fmt.Sprintf("任务操作失败：%s（错误码 %s）。", strings.TrimSpace(parts[1]), strings.TrimSpace(parts[0]))
+			return fmt.Sprintf("任务操作失败：%s", userFacingAria2TaskMessage(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])))
 		}
 	}
 	if strings.HasPrefix(text, "aria2 unreachable:") {

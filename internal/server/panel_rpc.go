@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -35,17 +36,7 @@ type panelRPCError struct {
 var panelRPCUpgrader = websocket.Upgrader{
 	ReadBufferSize:  32 << 10,
 	WriteBufferSize: 32 << 10,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		parsed, err := url.Parse(origin)
-		if err != nil {
-			return false
-		}
-		return parsed.Host == r.Host
-	},
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 func (s *Server) handlePanelRPC(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +61,10 @@ func (s *Server) handlePanelRPC(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request, outerAuthorized bool) {
+	if !s.panelRPCOriginAllowed(r) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
 	conn, err := panelRPCUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -108,6 +103,40 @@ func (s *Server) handlePanelRPCWebSocket(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
+}
+
+func (s *Server) panelRPCOriginAllowed(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	s.cfgMu.RLock()
+	mode := s.cfg.Panel.RPCOriginCheckMode
+	whitelist := append([]string(nil), s.cfg.Panel.RPCOriginWhitelist...)
+	s.cfgMu.RUnlock()
+
+	originHost := strings.ToLower(parsed.Host)
+	requestHost := strings.ToLower(strings.TrimSpace(r.Host))
+	if mode == panelRPCOriginModeDisabled {
+		return true
+	}
+	if originHost == requestHost {
+		return true
+	}
+	if mode != panelRPCOriginModeWhitelist {
+		return false
+	}
+	originHostname := strings.ToLower(parsed.Hostname())
+	for _, allowed := range whitelist {
+		if allowed == originHost || allowed == originHostname {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) proxyPanelRPCPayload(bodyReader interface{ Read([]byte) (int, error) }, outerAuthorized bool) ([]byte, int, error) {

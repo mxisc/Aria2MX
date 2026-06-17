@@ -71,6 +71,77 @@ var managedCommaSeparatedOptionKeys = map[string]struct{}{
 	"no-proxy":           {},
 }
 
+var managedCACertificateCandidates = []string{
+	"/etc/ssl/certs/ca-certificates.crt",
+	"/etc/ssl/cert.pem",
+	"/etc/pki/tls/certs/ca-bundle.crt",
+	"/etc/ssl/ca-bundle.pem",
+}
+
+var managedReferenceDefaultOptions = map[string]string{
+	"allow-overwrite":                  "false",
+	"allow-piece-length-change":        "true",
+	"always-resume":                    "false",
+	"auto-file-renaming":               "true",
+	"auto-save-interval":               "20",
+	"bt-detach-seed-only":              "true",
+	"bt-enable-lpd":                    "true",
+	"bt-force-encryption":              "true",
+	"bt-hash-check-seed":               "true",
+	"bt-load-saved-metadata":           "true",
+	"bt-max-peers":                     "128",
+	"bt-prioritize-piece":              "head=32M,tail=32M",
+	"bt-remove-unselected-file":        "true",
+	"bt-request-peer-speed-limit":      "10M",
+	"bt-save-metadata":                 "true",
+	"bt-seed-unverified":               "false",
+	"bt-tracker-connect-timeout":       "10",
+	"bt-tracker-timeout":               "10",
+	"connect-timeout":                  "10",
+	"console-log-level":                "notice",
+	"content-disposition-default-utf8": "true",
+	"continue":                         "true",
+	"disable-ipv6":                     "true",
+	"disk-cache":                       "64M",
+	"enable-dht":                       "true",
+	"enable-dht6":                      "false",
+	"enable-peer-exchange":             "true",
+	"file-allocation":                  "none",
+	"follow-torrent":                   "true",
+	"force-save":                       "false",
+	"http-accept-gzip":                 "true",
+	"lowest-speed-limit":               "0",
+	"max-connection-per-server":        "16",
+	"max-concurrent-downloads":         "5",
+	"max-download-limit":               "0",
+	"max-file-not-found":               "10",
+	"max-overall-download-limit":       "0",
+	"max-overall-upload-limit":         "2M",
+	"max-resume-failure-tries":         "0",
+	"max-tries":                        "0",
+	"max-upload-limit":                 "0",
+	"min-split-size":                   "4M",
+	"no-file-allocation-limit":         "64M",
+	"no-netrc":                         "true",
+	"pause-metadata":                   "false",
+	"peer-agent":                       "Deluge 1.3.15",
+	"peer-id-prefix":                   "-DE13F0-",
+	"piece-length":                     "1M",
+	"quiet":                            "false",
+	"remote-time":                      "true",
+	"retry-wait":                       "10",
+	"reuse-uri":                        "false",
+	"rpc-max-request-size":             "10M",
+	"save-session-interval":            "1",
+	"seed-ratio":                       "1.0",
+	"seed-time":                        "0",
+	"show-console-readout":             "false",
+	"split":                            "64",
+	"summary-interval":                 "0",
+	"timeout":                          "10",
+	"user-agent":                       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.47",
+}
+
 type ManagedAria2 struct {
 	configPath string
 	cfg        *Config
@@ -351,6 +422,7 @@ func (m *ManagedAria2) startLocked() error {
 	if err := os.MkdirAll(filepath.Join(root, "downloads"), 0o755); err != nil {
 		return err
 	}
+	effectiveOptions := m.effectiveManagedOptions(root, cfg)
 
 	binaryPath, runtimeEnv, err := m.resolveBinary(cfg)
 	if err != nil {
@@ -365,9 +437,16 @@ func (m *ManagedAria2) startLocked() error {
 		return err
 	}
 
-	sessionPath := filepath.Join(root, "session.dat")
-	if _, err := os.Stat(sessionPath); errors.Is(err, os.ErrNotExist) {
-		if err := os.WriteFile(sessionPath, nil, 0o600); err != nil {
+	inputFilePath := strings.TrimSpace(effectiveOptions["input-file"])
+	sessionPath := strings.TrimSpace(effectiveOptions["save-session"])
+	if inputFilePath == "" {
+		inputFilePath = filepath.Join(root, "session.dat")
+	}
+	if sessionPath == "" {
+		sessionPath = inputFilePath
+	}
+	for _, targetPath := range []string{inputFilePath, sessionPath} {
+		if err := ensureManagedStateFile(targetPath); err != nil {
 			_ = logFile.Close()
 			return err
 		}
@@ -381,10 +460,9 @@ func (m *ManagedAria2) startLocked() error {
 		"--rpc-secret=" + cfg.RPCSecret,
 		"--rpc-secure=false",
 		"--rpc-allow-origin-all=false",
-		"--input-file=" + sessionPath,
-		"--save-session=" + sessionPath,
-		"--save-session-interval=30",
-		"--auto-save-interval=30",
+	}
+	if caCertificate := managedCACertificatePath(cfg); caCertificate != "" {
+		args = append(args, "--ca-certificate="+caCertificate)
 	}
 
 	cmd := exec.Command(binaryPath, args...)
@@ -606,26 +684,19 @@ func (m *ManagedAria2) stateRoot(cfg Aria2Config) string {
 
 func (m *ManagedAria2) writeConfigFile(root string, cfg Aria2Config) (string, error) {
 	confPath := filepath.Join(root, "aria2.conf")
-	lines := make([]string, 0, len(cfg.Options)+2)
-	keys := make([]string, 0, len(cfg.Options))
-	for key := range cfg.Options {
+	effectiveOptions := m.effectiveManagedOptions(root, cfg)
+	lines := make([]string, 0, len(effectiveOptions))
+	keys := make([]string, 0, len(effectiveOptions))
+	for key := range effectiveOptions {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		value := strings.TrimSpace(normalizeManagedOptionValue(key, cfg.Options[key]))
+		value := strings.TrimSpace(normalizeManagedOptionValue(key, effectiveOptions[key]))
 		if value == "" {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
-	}
-	m.cfgMu.RLock()
-	defaultDir := strings.TrimSpace(m.cfg.Panel.DefaultDownloadDir)
-	m.cfgMu.RUnlock()
-	if _, ok := cfg.Options["dir"]; !ok && defaultDir != "" {
-		lines = append(lines, fmt.Sprintf("dir=%s", defaultDir))
-	} else if _, ok := cfg.Options["dir"]; !ok {
-		lines = append(lines, fmt.Sprintf("dir=%s", filepath.Join(root, "downloads")))
 	}
 	data := strings.Join(lines, "\n")
 	if data != "" {
@@ -635,6 +706,57 @@ func (m *ManagedAria2) writeConfigFile(root string, cfg Aria2Config) (string, er
 		return "", err
 	}
 	return confPath, nil
+}
+
+func (m *ManagedAria2) effectiveManagedOptions(root string, cfg Aria2Config) map[string]string {
+	m.cfgMu.RLock()
+	defaultDir := strings.TrimSpace(m.cfg.Panel.DefaultDownloadDir)
+	m.cfgMu.RUnlock()
+	options := managedDefaultOptions(root, defaultDir)
+	for key, value := range cfg.Options {
+		normalized := normalizeManagedOptionValue(key, value)
+		if strings.TrimSpace(normalized) == "" {
+			delete(options, key)
+			continue
+		}
+		options[key] = normalized
+	}
+	return options
+}
+
+func managedDefaultOptions(root, defaultDownloadDir string) map[string]string {
+	dir := strings.TrimSpace(defaultDownloadDir)
+	if dir == "" {
+		dir = filepath.Join(root, "downloads")
+	}
+	sessionPath := filepath.Join(root, "session.dat")
+	options := make(map[string]string, len(managedReferenceDefaultOptions)+6)
+	for key, value := range managedReferenceDefaultOptions {
+		options[key] = value
+	}
+	options["dir"] = dir
+	options["dht-entry-point"] = "dht.transmissionbt.com:6881"
+	options["dht-entry-point6"] = "dht.transmissionbt.com:6881"
+	options["dht-file-path"] = filepath.Join(root, "dht.dat")
+	options["dht-file-path6"] = filepath.Join(root, "dht6.dat")
+	options["input-file"] = sessionPath
+	options["save-session"] = sessionPath
+	return options
+}
+
+func ensureManagedStateFile(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return os.WriteFile(path, nil, 0o600)
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *ManagedAria2) resolveBinary(cfg Aria2Config) (string, []string, error) {
@@ -690,6 +812,18 @@ func runtimeLibraryEnv(root string) []string {
 	default:
 		return nil
 	}
+}
+
+func managedCACertificatePath(cfg Aria2Config) string {
+	if value := strings.TrimSpace(cfg.Options["ca-certificate"]); value != "" {
+		return ""
+	}
+	for _, candidate := range managedCACertificateCandidates {
+		if stat, err := os.Stat(candidate); err == nil && !stat.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func extractTarGz(data []byte, target string) error {

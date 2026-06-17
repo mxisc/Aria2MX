@@ -5,7 +5,7 @@ export type ColorMode = 'system' | 'light' | 'dark'
 export type ResolvedColorMode = 'light' | 'dark'
 
 export const currentTheme = ref<AppTheme>('ariamx')
-export const currentColorMode = ref<ColorMode>('light')
+export const currentColorMode = ref<ColorMode>('system')
 export const currentResolvedColorMode = ref<ResolvedColorMode>('light')
 
 let systemColorSchemeMedia: MediaQueryList | null = null
@@ -16,7 +16,7 @@ export function normalizeTheme(value?: string): AppTheme {
 }
 
 export function normalizeColorMode(value?: string): ColorMode {
-  return value === 'dark' || value === 'light' || value === 'system' ? value : 'light'
+  return value === 'dark' || value === 'light' || value === 'system' ? value : 'system'
 }
 
 function resolveColorMode(mode: ColorMode): ResolvedColorMode {

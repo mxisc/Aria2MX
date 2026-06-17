@@ -6,7 +6,9 @@
 
 - 登录认证和服务端 Cookie 会话
 - aria2 all-in-one 托管：面板内置 aria2 运行时，自动拉起本地 RPC
+- AIO 模式下，托管 aria2 的默认参数基线对齐 `P3TERX/aria2.conf`，但会保留面板接管的 RPC、安全和运行路径设置
 - 面板层 JSON-RPC 代理：统一通过 `/jsonrpc` 暴露 HTTP / WS 接口；外部调用使用面板独立 RPC Secret，不复用 aria2 内部 Secret；在 TLS 入口下可直接使用 HTTPS / WSS
+- 面板设置支持 `/jsonrpc` WebSocket 同源校验三档：默认开启 Origin 校验，也可切换为关闭 Origin 校验或白名单模式
 - 下载总览、任务分类、搜索、排序、任务详情
 - 任务暂停、强制暂停、继续、移除、清理结果、队列置顶/置底
 - 全局暂停、全局继续、清理下载结果、保存 aria2 session
@@ -17,8 +19,10 @@
 - aria2 全局选项按 AriaNg 分组查看和修改，包含中文名称、说明、只读状态和常用枚举选择
 - 全局选项保存、重置默认值，以及“需要重启才生效”的选项自动重启 aria2
 - AIO 模式下，若内置 RPC 端口冲突，会按 `+10` 自动步进到下一个可用端口并回写配置
+- AIO 模式下，内置 aria2 的 RPC 端口由面板自动寻找空闲端口；管理后台不再单独展示或配置该端口
 - AIO 模式下，面板收到 `SIGINT` / `SIGTERM` 时会主动停止内置 aria2
 - 节点防护：扫描活动 BT 任务的 Peer，按评分识别高风险节点，并通过系统防火墙封禁 IP
+- 节点订阅页：内置 `ngosang`、`newtrackon`、`adysec` 等公开 BT Tracker 订阅源，开启后会拉取所选源并覆盖 aria2 的 `bt-tracker`
 - 左侧栏显示面板版本和当前 aria2 版本
 - 刷新间隔、默认下载目录、浅色/深色模式和面板密码设置
 - 按平台单二进制部署：每个发布产物只内嵌对应平台的 aria2 运行时
@@ -96,6 +100,14 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 
 登录后的“连接信息”页面会直接显示 HTTP / WS 连接方式以及当前面板 RPC Secret。
 
+登录后可在左侧“节点订阅”页面启用公开 BT Tracker 订阅源。当前内置 `ngosang-best`、`ngosang-all`、`newtrackon-stable`、`adysec-best` 四个来源。保存后，面板会抓取所选源并把结果写入 aria2 的 `bt-tracker`；关闭该功能只会停止自动同步，不会自动清空已经写入的 tracker。
+
+登录后可在“设置”页调整 `/jsonrpc` 的 WebSocket 同源校验模式：
+
+- `开启Origin校验`：默认模式，不允许跨站调用
+- `关闭Origin校验`：允许任何网站发起调用
+- `白名单模式`：只允许面板自身域名和白名单中的特定网站发起调用；判断依据为 `Origin` 请求头，AriaNg 等外部面板接入需要关闭同源校验或使用白名单模式
+
 为了兼容不同客户端，面板 `/jsonrpc` 仍然兼容 `Authorization: Bearer <panel rpc secret>` 和 `ws://.../jsonrpc?secret=<panel rpc secret>` 这两种入口；但默认文档和面板页面都按 aria2 / AriaNg 更常见的 `token:<secret>` 习惯展示。面板会先校验这个 token 是否等于 `panel.rpcSecret`，只有校验通过后才会继续转发，并在转发到 aria2 前自动替换成内部 `aria2.rpcSecret`。如果填写的是错误的面板 secret，调用仍然会被拒绝。
 
 另外，面板还提供可开关的 MCP HTTP 入口：
@@ -126,7 +138,7 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 
 登录后的“连接信息”页面会展示 MCP 地址与初始化请求；“MCP”页面只展示可用工具列表。若在“面板设置”里关闭 MCP，`/mcp` 会直接拒绝访问。
 
-登录后可在“设置”页切换 `AriaMX` 皮肤的 `跟随系统` / `浅色` / `深色` 模式。显示模式会写入 `ariamx.json` 的 `panel.theme` / `panel.colorMode`，后续登录会继续沿用；选择“跟随系统”后，系统深浅色变化会实时同步到面板。
+登录后可在“设置”页切换 `AriaMX` 皮肤的 `跟随系统` / `浅色模式` / `深色模式`。显示模式会写入 `ariamx.json` 的 `panel.theme` / `panel.colorMode`，后续登录会继续沿用；选择“跟随系统”后，系统深浅色变化会实时同步到面板。
 
 如果直链任务因为旧的 `.aria2` 控制文件与当前分片信息冲突而失败，面板会直接提示这是续传控制文件冲突；对失败任务点击“重新开始”时，面板会自动挪开冲突的 `.aria2` 控制文件后再重建任务。
 

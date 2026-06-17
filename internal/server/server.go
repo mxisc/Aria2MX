@@ -3,6 +3,7 @@ package server
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -62,6 +63,7 @@ func New(opts Options) (*Server, error) {
 			return nil, err
 		}
 	}
+	s.syncTrackerSubscription()
 	s.startPeerGuardLoop()
 	if len(s.cfg.PeerGuard.BlockedPeers) > 0 {
 		_ = s.applyPeerGuardFirewall(nil, s.cfg.PeerGuard.BlockedPeers)
@@ -90,6 +92,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/aria2/restart", s.withAuth(s.handleAria2Restart))
 	mux.HandleFunc("/api/aria2/remove", s.withAuth(s.handleAria2Remove))
 	mux.HandleFunc("/api/aria2/upload-torrent", s.withAuth(s.handleTorrentUpload))
+	mux.HandleFunc("/api/tracker-subscription", s.withAuth(s.handleTrackerSubscription))
 	mux.HandleFunc("/api/peer-guard", s.withAuth(s.handlePeerGuard))
 	mux.HandleFunc("/api/peer-guard/ban", s.withAuth(s.handlePeerGuardBan))
 	mux.HandleFunc("/api/peer-guard/unban", s.withAuth(s.handlePeerGuardUnban))
@@ -115,8 +118,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username       string `json:"username"`
+		PasswordSHA256 string `json:"passwordSha256"`
 	}
 	if err := readJSON(r, &payload); err != nil {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查登录信息后重试。")
@@ -127,7 +130,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	ttl := time.Duration(s.cfg.Panel.SessionTTLSeconds) * time.Second
 	s.cfgMu.RUnlock()
 
-	if payload.Username != admin.Username || !VerifyPassword(payload.Password, admin.PasswordSalt, admin.PasswordHash) {
+	passwordVerified := IsSHA256Hex(payload.PasswordSHA256) && VerifyPassword(payload.PasswordSHA256, admin.PasswordSalt, admin.PasswordHash, admin.PasswordScheme)
+
+	if payload.Username != admin.Username || !passwordVerified {
 		writeAPIError(w, http.StatusUnauthorized, "invalid_login", "用户名或密码不正确。")
 		return
 	}
@@ -222,28 +227,35 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		s.cfgMu.RLock()
 		cfg := s.cfg
 		data := map[string]interface{}{
-			"aria2RpcUrl":        cfg.Aria2.RPCURL,
-			"hasAria2Secret":     cfg.Aria2.RPCSecret != "",
-			"aria2Managed":       cfg.Aria2.Managed,
-			"managedRpcPort":     cfg.Aria2.ManagedRPCPort,
-			"mcpEnabled":         cfg.Panel.MCPEnabled,
-			"refreshIntervalMs":  cfg.Panel.RefreshIntervalMs,
-			"defaultDownloadDir": cfg.Panel.DefaultDownloadDir,
-			"theme":              cfg.Panel.Theme,
-			"colorMode":          cfg.Panel.ColorMode,
+			"aria2RpcUrl":                cfg.Aria2.RPCURL,
+			"hasAria2Secret":             cfg.Aria2.RPCSecret != "",
+			"aria2Managed":               cfg.Aria2.Managed,
+			"rpcOriginCheckMode":         cfg.Panel.RPCOriginCheckMode,
+			"rpcOriginWhitelist":         append([]string{}, cfg.Panel.RPCOriginWhitelist...),
+			"trackerSubscriptionEnabled": cfg.Panel.TrackerSubscriptionEnabled,
+			"trackerSubscriptionSource":  cfg.Panel.TrackerSubscriptionSource,
+			"mcpEnabled":                 cfg.Panel.MCPEnabled,
+			"refreshIntervalMs":          cfg.Panel.RefreshIntervalMs,
+			"defaultDownloadDir":         cfg.Panel.DefaultDownloadDir,
+			"theme":                      cfg.Panel.Theme,
+			"colorMode":                  cfg.Panel.ColorMode,
 		}
 		s.cfgMu.RUnlock()
 		writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
 	case http.MethodPut:
 		var payload struct {
-			Aria2RPCURL        *string `json:"aria2RpcUrl"`
-			Aria2Secret        *string `json:"aria2Secret"`
-			RefreshIntervalMs  *int    `json:"refreshIntervalMs"`
-			DefaultDownloadDir *string `json:"defaultDownloadDir"`
-			MCPEnabled         *bool   `json:"mcpEnabled"`
-			Theme              *string `json:"theme"`
-			ColorMode          *string `json:"colorMode"`
-			NewPassword        *string `json:"newPassword"`
+			Aria2RPCURL                *string   `json:"aria2RpcUrl"`
+			Aria2Secret                *string   `json:"aria2Secret"`
+			RefreshIntervalMs          *int      `json:"refreshIntervalMs"`
+			DefaultDownloadDir         *string   `json:"defaultDownloadDir"`
+			RPCOriginCheckMode         *string   `json:"rpcOriginCheckMode"`
+			RPCOriginWhitelist         *[]string `json:"rpcOriginWhitelist"`
+			TrackerSubscriptionEnabled *bool     `json:"trackerSubscriptionEnabled"`
+			TrackerSubscriptionSource  *string   `json:"trackerSubscriptionSource"`
+			MCPEnabled                 *bool     `json:"mcpEnabled"`
+			Theme                      *string   `json:"theme"`
+			ColorMode                  *string   `json:"colorMode"`
+			NewPasswordSHA256          *string   `json:"newPasswordSha256"`
 		}
 		if err := readJSON(r, &payload); err != nil {
 			writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查设置内容后重试。")
@@ -264,6 +276,21 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if payload.DefaultDownloadDir != nil {
 			s.cfg.Panel.DefaultDownloadDir = *payload.DefaultDownloadDir
 		}
+		if payload.RPCOriginCheckMode != nil {
+			switch *payload.RPCOriginCheckMode {
+			case panelRPCOriginModeDisabled, panelRPCOriginModeSameOrigin, panelRPCOriginModeWhitelist:
+				s.cfg.Panel.RPCOriginCheckMode = *payload.RPCOriginCheckMode
+			}
+		}
+		if payload.RPCOriginWhitelist != nil {
+			s.cfg.Panel.RPCOriginWhitelist = append([]string(nil), (*payload.RPCOriginWhitelist)...)
+		}
+		if payload.TrackerSubscriptionEnabled != nil {
+			s.cfg.Panel.TrackerSubscriptionEnabled = *payload.TrackerSubscriptionEnabled
+		}
+		if payload.TrackerSubscriptionSource != nil && isSupportedTrackerSubscriptionSource(*payload.TrackerSubscriptionSource) {
+			s.cfg.Panel.TrackerSubscriptionSource = *payload.TrackerSubscriptionSource
+		}
 		if payload.MCPEnabled != nil {
 			s.cfg.Panel.MCPEnabled = *payload.MCPEnabled
 		}
@@ -273,7 +300,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if payload.ColorMode != nil && (*payload.ColorMode == "system" || *payload.ColorMode == "light" || *payload.ColorMode == "dark") {
 			s.cfg.Panel.ColorMode = *payload.ColorMode
 		}
-		if payload.NewPassword != nil && len(*payload.NewPassword) >= 6 {
+		if payload.NewPasswordSHA256 != nil && IsSHA256Hex(*payload.NewPasswordSHA256) {
 			salt, err := randomHex(16)
 			if err != nil {
 				s.cfgMu.Unlock()
@@ -281,7 +308,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.cfg.Admin.PasswordSalt = salt
-			s.cfg.Admin.PasswordHash = HashPassword(*payload.NewPassword, salt)
+			s.cfg.Admin.PasswordHash = HashPasswordFromClientSHA256(*payload.NewPasswordSHA256, salt)
+			s.cfg.Admin.PasswordScheme = passwordSchemeClientSHA256PBKDF2
 		}
 		err := SaveConfig(s.configPath, s.cfg)
 		s.cfgMu.Unlock()
@@ -312,6 +340,10 @@ func (s *Server) handleAria2Options(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "请检查选项内容后重试。")
 		return
 	}
+	if err := validateManagedAria2Patch(payload.Patch, s.cfg.Panel.TrackerSubscriptionEnabled); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "managed_locked", err.Error())
+		return
+	}
 
 	result, err := s.managed.SaveOptions(payload.Patch)
 	if err != nil {
@@ -319,6 +351,16 @@ func (s *Server) handleAria2Options(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: result})
+}
+
+func validateManagedAria2Patch(patch map[string]string, trackerSubscriptionEnabled bool) error {
+	if !trackerSubscriptionEnabled {
+		return nil
+	}
+	if _, ok := patch["bt-tracker"]; ok {
+		return fmt.Errorf("节点订阅开启时，BT Tracker 服务器由订阅源自动维护，请先关闭节点订阅后再修改。")
+	}
+	return nil
 }
 
 func (s *Server) handleAria2OptionsReset(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { SlidersHorizontal } from 'lucide-vue-next'
 import { api } from '@/api'
-import type { Aria2OptionMap } from '@/types'
+import type { AppConfig, Aria2OptionMap } from '@/types'
 
 type OptionCategory = {
   id: string
@@ -24,6 +24,10 @@ const message = ref('')
 const errorDialog = ref('')
 const activeCategory = ref('basic')
 const search = ref('')
+const config = ref<Pick<AppConfig, 'trackerSubscriptionEnabled' | 'trackerSubscriptionSource'>>({
+  trackerSubscriptionEnabled: false,
+  trackerSubscriptionSource: '',
+})
 
 const multilineOptionKeys = new Set(['header', 'bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
 const commaSeparatedOptionKeys = new Set(['bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
@@ -62,7 +66,7 @@ const categories: OptionCategory[] = [
   {
     id: 'rpc',
     name: 'RPC',
-    keys: ['enable-rpc', 'pause-metadata', 'rpc-allow-origin-all', 'rpc-listen-all', 'rpc-listen-port', 'rpc-max-request-size', 'rpc-save-upload-metadata', 'rpc-secure'],
+    keys: ['enable-rpc', 'pause-metadata', 'rpc-allow-origin-all', 'rpc-listen-all', 'rpc-max-request-size', 'rpc-save-upload-metadata', 'rpc-secure'],
   },
   {
     id: 'advanced',
@@ -177,7 +181,6 @@ const copy: Record<string, OptionCopy> = {
   'pause-metadata': { name: '种子文件下载完后暂停', choices: ['true', 'false'] },
   'rpc-allow-origin-all': { name: '接受所有远程请求', choices: ['true', 'false'], readonly: true },
   'rpc-listen-all': { name: '在所有网卡上监听', choices: ['true', 'false'], readonly: true },
-  'rpc-listen-port': { name: 'RPC 监听端口', readonly: true },
   'rpc-max-request-size': { name: 'RPC 最大请求大小', readonly: true },
   'rpc-save-upload-metadata': { name: '保存上传元数据', choices: ['true', 'false'] },
   'rpc-secure': { name: '启用 SSL/TLS', choices: ['true', 'false'], readonly: true },
@@ -248,9 +251,16 @@ async function load() {
   loading.value = true
   message.value = ''
   try {
-    const loaded = await api.aria2<Aria2OptionMap>('aria2.getGlobalOption')
+    const [loaded, loadedConfig] = await Promise.all([
+      api.aria2<Aria2OptionMap>('aria2.getGlobalOption'),
+      api.getConfig(),
+    ])
     options.value = normalizeOptionsForEditor(loaded)
     baseline.value = { ...options.value }
+    config.value = {
+      trackerSubscriptionEnabled: loadedConfig.trackerSubscriptionEnabled,
+      trackerSubscriptionSource: loadedConfig.trackerSubscriptionSource,
+    }
   } catch (error) {
     showError(error instanceof Error ? error.message : '全局选项读取失败。')
   } finally {
@@ -319,6 +329,9 @@ function optionTitle(key: string) {
 }
 
 function optionDescription(key: string) {
+  if (isOptionReadonly(key) && key === 'bt-tracker' && config.value.trackerSubscriptionEnabled) {
+    return '节点订阅已开启，当前 bt-tracker 由订阅源自动维护。'
+  }
   return copy[key]?.description || '来自 aria2 全局选项。'
 }
 
@@ -329,9 +342,15 @@ function optionControlKind(key: string) {
 }
 
 function optionTypeLabel(key: string) {
+  if (isOptionReadonly(key)) return '只读'
   if (copy[key]?.choices?.length) return '枚举'
   if (optionControlKind(key) === 'textarea') return '多行'
   return '文本'
+}
+
+function isOptionReadonly(key: string) {
+  if (copy[key]?.readonly) return true
+  return key === 'bt-tracker' && config.value.trackerSubscriptionEnabled
 }
 
 function optionDisplayValue(key: string) {
@@ -388,7 +407,7 @@ function normalizeOptionValueForEditor(key: string, value: string) {
             v-for="key in visibleKeys"
             :key="key"
             class="option-row"
-            :class="{ multiline: optionControlKind(key) === 'textarea' }"
+            :class="{ multiline: optionControlKind(key) === 'textarea', readonly: isOptionReadonly(key) }"
           >
             <div class="option-main">
               <b>{{ optionTitle(key) }}</b>
@@ -402,7 +421,7 @@ function normalizeOptionValueForEditor(key: string, value: string) {
               <select
                 v-if="optionControlKind(key) === 'select'"
                 :value="optionValue(key)"
-                :disabled="loading"
+                :disabled="loading || isOptionReadonly(key)"
                 @change="updateOption(key, $event)"
               >
                 <option v-if="!optionValue(key)" value="">
@@ -415,14 +434,14 @@ function normalizeOptionValueForEditor(key: string, value: string) {
               <textarea
                 v-else-if="optionControlKind(key) === 'textarea'"
                 :value="optionValue(key)"
-                :disabled="loading"
+                :disabled="loading || isOptionReadonly(key)"
                 spellcheck="false"
                 @input="updateOption(key, $event)"
               />
               <input
                 v-else
                 :value="optionValue(key)"
-                :disabled="loading"
+                :disabled="loading || isOptionReadonly(key)"
                 @input="updateOption(key, $event)"
               >
             </div>

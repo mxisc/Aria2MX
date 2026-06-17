@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Activity, ArrowLeft, Blocks, Eraser, Gauge, Info, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, Shield, SlidersHorizontal } from 'lucide-vue-next'
+import { Activity, ArrowLeft, Blocks, Eraser, Gauge, Info, Link2, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, Shield, SlidersHorizontal } from 'lucide-vue-next'
 import { api, fetchDashboard } from '@/api'
 import AddTaskPanel from '@/components/AddTaskPanel.vue'
 import Aria2OptionsPanel from '@/components/Aria2OptionsPanel.vue'
 import ConnectionInfoPanel from '@/components/ConnectionInfoPanel.vue'
 import MCPPanel from '@/components/MCPPanel.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import NodeSubscriptionPanel from '@/components/NodeSubscriptionPanel.vue'
 import PeerGuardPanel from '@/components/PeerGuardPanel.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 import TaskList from '@/components/TaskList.vue'
+import { builtInTrackerSubscriptions } from '@/data/nodeSubscriptions'
 import type { AppAbout, Aria2Task, GlobalStat, TaskBucket } from '@/types'
 import { percent, speed, taskName } from '@/utils/format'
 
@@ -22,7 +24,7 @@ const stopped = ref<Aria2Task[]>([])
 const stat = ref<GlobalStat>({ downloadSpeed: '0', uploadSpeed: '0', numActive: '0', numWaiting: '0', numStopped: '0' })
 const selected = ref<Aria2Task>()
 const bucket = ref<TaskBucket>('active')
-const activePage = ref<'overview' | 'tasks' | 'taskDetail' | 'add' | 'options' | 'peerGuard' | 'connection' | 'mcp' | 'settings'>('overview')
+const activePage = ref<'overview' | 'tasks' | 'taskDetail' | 'add' | 'subscriptions' | 'options' | 'peerGuard' | 'connection' | 'mcp' | 'settings'>('overview')
 const query = ref('')
 const sortBy = ref<'name' | 'progress' | 'speed' | 'size'>('name')
 const error = ref('')
@@ -35,6 +37,7 @@ const pageMeta = {
   tasks: { title: '任务列表', subtitle: '筛选、检索并管理当前下载任务。', badge: '任务列表' },
   taskDetail: { title: '任务详情', subtitle: '查看单个任务的完整状态、文件和选项。', badge: '任务详情' },
   add: { title: '新建任务', subtitle: '提交链接、磁力或种子文件。', badge: '新建任务' },
+  subscriptions: { title: '节点订阅', subtitle: '选择内置订阅源并写入 aria2 的 bt-tracker。', badge: '节点订阅' },
   options: { title: 'Aria2', subtitle: '按分类维护 aria2 全局参数。', badge: 'Aria2' },
   peerGuard: { title: '节点防护', subtitle: '识别高风险 Peer 并通过系统防火墙封禁。', badge: '节点防护' },
   connection: { title: '连接信息', subtitle: '查看当前面板代理、内置 RPC、MCP 和版本信息。', badge: '连接信息' },
@@ -55,6 +58,7 @@ const currentPageMeta = computed(() => {
 })
 const currentBucketCount = computed(() => {
   if (activePage.value === 'taskDetail') return selected.value ? '1' : '0'
+  if (activePage.value === 'subscriptions') return String(builtInTrackerSubscriptions.length)
   if (activePage.value !== 'tasks') return String(allTasks.value.length)
   if (bucket.value === 'waiting') return stat.value.numWaiting
   if (bucket.value === 'stopped') return stat.value.numStopped
@@ -237,6 +241,9 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
           <button :class="{ active: activePage === 'tasks' || activePage === 'taskDetail' }" @click="activePage = 'tasks'">
             <ListTree :size="16" /> 任务列表
           </button>
+          <button :class="{ active: activePage === 'subscriptions' }" @click="activePage = 'subscriptions'">
+            <Link2 :size="16" /> 节点订阅
+          </button>
           <button :class="{ active: activePage === 'peerGuard' }" @click="activePage = 'peerGuard'">
             <Shield :size="16" /> 节点防护
           </button>
@@ -405,6 +412,9 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
 
         <section v-else-if="activePage === 'add'" class="page-shell">
           <AddTaskPanel @created="refresh" />
+        </section>
+        <section v-else-if="activePage === 'subscriptions'" class="page-shell">
+          <NodeSubscriptionPanel />
         </section>
         <section v-else-if="activePage === 'options'" class="page-shell">
           <Aria2OptionsPanel />

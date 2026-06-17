@@ -63,6 +63,64 @@ func TestHandlePanelRPCRejectsWrongPanelSecret(t *testing.T) {
 	}
 }
 
+func TestPanelRPCOriginAllowedSameOriginMode(t *testing.T) {
+	server, _, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	server.cfg.Panel.RPCOriginCheckMode = panelRPCOriginModeSameOrigin
+
+	req := httptest.NewRequest(http.MethodGet, "/jsonrpc", nil)
+	req.Host = "panel.example.com"
+	req.Header.Set("Origin", "https://panel.example.com")
+	if !server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected same host origin to be allowed")
+	}
+
+	req.Header.Set("Origin", "https://ariang.example.com")
+	if server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected foreign origin to be rejected in same origin mode")
+	}
+}
+
+func TestPanelRPCOriginAllowedDisabledMode(t *testing.T) {
+	server, _, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	server.cfg.Panel.RPCOriginCheckMode = panelRPCOriginModeDisabled
+
+	req := httptest.NewRequest(http.MethodGet, "/jsonrpc", nil)
+	req.Host = "panel.example.com"
+	req.Header.Set("Origin", "https://ariang.example.com")
+	if !server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected foreign origin to be allowed when disabled")
+	}
+}
+
+func TestPanelRPCOriginAllowedWhitelistMode(t *testing.T) {
+	server, _, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	server.cfg.Panel.RPCOriginCheckMode = panelRPCOriginModeWhitelist
+	server.cfg.Panel.RPCOriginWhitelist = []string{"ariang.example.com", "panel.example.com:8443"}
+
+	req := httptest.NewRequest(http.MethodGet, "/jsonrpc", nil)
+	req.Host = "panel.example.com"
+	req.Header.Set("Origin", "https://ariang.example.com")
+	if !server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected whitelisted host to be allowed")
+	}
+
+	req.Header.Set("Origin", "https://panel.example.com:8443")
+	if !server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected exact host:port whitelist to be allowed")
+	}
+
+	req.Header.Set("Origin", "https://evil.example")
+	if server.panelRPCOriginAllowed(req) {
+		t.Fatal("expected non-whitelisted host to be rejected")
+	}
+}
+
 type observedRPCRequest struct {
 	Method string        `json:"method"`
 	Params []interface{} `json:"params"`
@@ -162,8 +220,9 @@ func newPanelRPCTestServer(t *testing.T) (*Server, *observedRPCRequest, func()) 
 				RPCSecret: "aria-secret",
 			},
 			Panel: PanelConfig{
-				RPCSecret:  "panel-secret",
-				MCPEnabled: true,
+				RPCSecret:          "panel-secret",
+				RPCOriginCheckMode: panelRPCOriginModeSameOrigin,
+				MCPEnabled:         true,
 			},
 		},
 		sessions: NewSessionStore(),

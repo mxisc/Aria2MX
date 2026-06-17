@@ -84,7 +84,7 @@ func (c *Aria2Client) Call(req Aria2CallRequest) (interface{}, error) {
 	if decoded.Error != nil {
 		return nil, fmt.Errorf("aria2 error %d: %s", decoded.Error.Code, decoded.Error.Message)
 	}
-	return decoded.Result, nil
+	return localizeAria2Result(req.Method, decoded.Result), nil
 }
 
 func (c *Aria2Client) AddTorrent(r io.Reader, options map[string]string) (interface{}, error) {

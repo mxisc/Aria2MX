@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,9 +21,10 @@ type Config struct {
 }
 
 type AdminConfig struct {
-	Username     string `json:"username"`
-	PasswordHash string `json:"passwordHash"`
-	PasswordSalt string `json:"passwordSalt"`
+	Username       string `json:"username"`
+	PasswordHash   string `json:"passwordHash"`
+	PasswordSalt   string `json:"passwordSalt"`
+	PasswordScheme string `json:"passwordScheme,omitempty"`
 }
 
 type Aria2Config struct {
@@ -36,13 +38,17 @@ type Aria2Config struct {
 }
 
 type PanelConfig struct {
-	RefreshIntervalMs  int    `json:"refreshIntervalMs"`
-	DefaultDownloadDir string `json:"defaultDownloadDir"`
-	SessionTTLSeconds  int    `json:"sessionTTLSeconds"`
-	RPCSecret          string `json:"rpcSecret,omitempty"`
-	MCPEnabled         bool   `json:"mcpEnabled"`
-	Theme              string `json:"theme"`
-	ColorMode          string `json:"colorMode,omitempty"`
+	RefreshIntervalMs          int      `json:"refreshIntervalMs"`
+	DefaultDownloadDir         string   `json:"defaultDownloadDir"`
+	SessionTTLSeconds          int      `json:"sessionTTLSeconds"`
+	RPCSecret                  string   `json:"rpcSecret,omitempty"`
+	RPCOriginCheckMode         string   `json:"rpcOriginCheckMode,omitempty"`
+	RPCOriginWhitelist         []string `json:"rpcOriginWhitelist,omitempty"`
+	TrackerSubscriptionEnabled bool     `json:"trackerSubscriptionEnabled,omitempty"`
+	TrackerSubscriptionSource  string   `json:"trackerSubscriptionSource,omitempty"`
+	MCPEnabled                 bool     `json:"mcpEnabled"`
+	Theme                      string   `json:"theme"`
+	ColorMode                  string   `json:"colorMode,omitempty"`
 }
 
 type PeerGuardConfig struct {
@@ -58,6 +64,12 @@ type PeerBanRecord struct {
 }
 
 const defaultManagedRPCPort = 16800
+
+const (
+	panelRPCOriginModeDisabled   = "disabled"
+	panelRPCOriginModeSameOrigin = "same_origin"
+	panelRPCOriginModeWhitelist  = "whitelist"
+)
 
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -95,20 +107,22 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	cfg := &Config{
 		Admin: AdminConfig{
-			Username:     getenvDefault("ARIAMX_ADMIN_USER", "admin"),
-			PasswordSalt: salt,
-			PasswordHash: HashPassword(password, salt),
+			Username:       getenvDefault("ARIAMX_ADMIN_USER", "admin"),
+			PasswordSalt:   salt,
+			PasswordHash:   HashPasswordFromRaw(password, salt),
+			PasswordScheme: passwordSchemeClientSHA256PBKDF2,
 		},
 		Aria2: Aria2Config{
 			Managed:        true,
 			ManagedRPCPort: defaultManagedRPCPort,
 		},
 		Panel: PanelConfig{
-			RefreshIntervalMs: 1500,
-			SessionTTLSeconds: 86400,
-			MCPEnabled:        true,
-			Theme:             "ariamx",
-			ColorMode:         "light",
+			RefreshIntervalMs:  1500,
+			SessionTTLSeconds:  86400,
+			RPCOriginCheckMode: panelRPCOriginModeSameOrigin,
+			MCPEnabled:         true,
+			Theme:              "ariamx",
+			ColorMode:          "system",
 		},
 	}
 	if rpcURL := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_RPC")); rpcURL != "" {
@@ -175,6 +189,10 @@ func normalizeConfig(cfg *Config) bool {
 		cfg.Admin.Username = "admin"
 		mutated = true
 	}
+	if cfg.Admin.PasswordScheme != passwordSchemeClientSHA256PBKDF2 {
+		cfg.Admin.PasswordScheme = passwordSchemeClientSHA256PBKDF2
+		mutated = true
+	}
 	if cfg.Aria2.ManagedRPCPort <= 0 {
 		cfg.Aria2.ManagedRPCPort = defaultManagedRPCPort
 		mutated = true
@@ -197,13 +215,31 @@ func normalizeConfig(cfg *Config) bool {
 		cfg.Panel.SessionTTLSeconds = 86400
 		mutated = true
 	}
+	if cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeDisabled && cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeSameOrigin && cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeWhitelist {
+		cfg.Panel.RPCOriginCheckMode = panelRPCOriginModeSameOrigin
+		mutated = true
+	}
+	if cfg.Panel.TrackerSubscriptionSource != "" && !isSupportedTrackerSubscriptionSource(cfg.Panel.TrackerSubscriptionSource) {
+		cfg.Panel.TrackerSubscriptionEnabled = false
+		cfg.Panel.TrackerSubscriptionSource = ""
+		mutated = true
+	}
+	normalizedOrigins := normalizePanelRPCOriginWhitelist(cfg.Panel.RPCOriginWhitelist)
+	if len(normalizedOrigins) != len(cfg.Panel.RPCOriginWhitelist) {
+		cfg.Panel.RPCOriginWhitelist = normalizedOrigins
+		mutated = true
+	} else {
+		for index := range normalizedOrigins {
+			if normalizedOrigins[index] != cfg.Panel.RPCOriginWhitelist[index] {
+				cfg.Panel.RPCOriginWhitelist = normalizedOrigins
+				mutated = true
+				break
+			}
+		}
+	}
 	legacyTheme := strings.TrimSpace(cfg.Panel.Theme)
 	if cfg.Panel.ColorMode != "light" && cfg.Panel.ColorMode != "dark" && cfg.Panel.ColorMode != "system" {
-		if legacyTheme == "classic" {
-			cfg.Panel.ColorMode = "dark"
-		} else {
-			cfg.Panel.ColorMode = "light"
-		}
+		cfg.Panel.ColorMode = "system"
 		mutated = true
 	}
 	if legacyTheme != "ariamx" {
@@ -310,6 +346,41 @@ func normalizePeerBanRecords(records []PeerBanRecord) []PeerBanRecord {
 		normalized = append(normalized, record)
 	}
 	return normalized
+}
+
+func normalizePanelRPCOriginWhitelist(origins []string) []string {
+	if len(origins) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(origins))
+	for _, origin := range origins {
+		value := normalizePanelRPCOriginValue(origin)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized
+}
+
+func normalizePanelRPCOriginValue(origin string) string {
+	value := strings.ToLower(strings.TrimSpace(origin))
+	if value == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(value); err == nil && parsed.Host != "" {
+		return strings.ToLower(strings.TrimSpace(parsed.Host))
+	}
+	value = strings.TrimSuffix(value, "/")
+	if slash := strings.IndexByte(value, '/'); slash >= 0 {
+		value = value[:slash]
+	}
+	return strings.TrimSpace(value)
 }
 
 func panelConfigHasField(data []byte, field string) bool {

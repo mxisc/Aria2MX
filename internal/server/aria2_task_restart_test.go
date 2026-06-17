@@ -98,7 +98,7 @@ func TestRestartTaskReaddsURIAndRemovesOldResult(t *testing.T) {
 
 func TestUserFacingAria2Error(t *testing.T) {
 	got := userFacingAria2Error(assertError("aria2 error 10: Download aborted."))
-	want := "任务操作失败：Download aborted.（错误码 10）。"
+	want := "任务操作失败：下载已中止，请检查任务详情后重试。"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}

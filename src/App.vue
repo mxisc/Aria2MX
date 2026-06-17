@@ -16,7 +16,7 @@ onMounted(async () => {
     if (router.currentRoute.value.path === '/login') await router.replace('/')
   } catch {
     authenticated.value = false
-    applyTheme('ariamx', 'light')
+    applyTheme('ariamx', 'system')
     await router.replace('/login')
   } finally {
     ready.value = true
@@ -31,7 +31,7 @@ async function onAuthenticated() {
 
 async function onLoggedOut() {
   authenticated.value = false
-  applyTheme('ariamx', 'light')
+  applyTheme('ariamx', 'system')
   await router.replace('/login')
 }
 
@@ -40,7 +40,7 @@ async function loadTheme() {
     const config = await api.getConfig()
     applyTheme(config.theme, config.colorMode)
   } catch {
-    applyTheme('ariamx', 'light')
+    applyTheme('ariamx', 'system')
   }
 }
 </script>

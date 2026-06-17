@@ -1,4 +1,4 @@
-import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot } from './types'
+import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot, TrackerSubscriptionState } from './types'
 
 class AuthRedirectError extends Error {
   constructor() {
@@ -9,31 +9,58 @@ class AuthRedirectError extends Error {
 
 let authRedirecting = false
 
+function fallbackRequestErrorMessage(url: string, status: number): string {
+  if (url === '/api/tracker-subscription') {
+    if (status >= 500) return '节点订阅暂时不可用，请稍后重试。'
+    return '节点订阅保存失败，请检查设置后重试。'
+  }
+  if (status >= 500) return '服务暂时不可用，请稍后重试。'
+  return '请求失败，请稍后重试。'
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     credentials: 'include',
     headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...init,
   })
+  const rawPayload = await response.text()
+  let payload: ApiResponse<T> | null = null
+  try {
+    payload = rawPayload ? (JSON.parse(rawPayload) as ApiResponse<T>) : null
+  } catch {
+    payload = null
+  }
   if (response.status === 401) {
+    if (url === '/api/auth/login') {
+      throw new Error(payload?.error?.message || '用户名或密码不正确。')
+    }
     if (!authRedirecting && window.location.pathname !== '/login') {
       authRedirecting = true
       window.location.replace('/login')
     }
     throw new AuthRedirectError()
   }
-  const payload = (await response.json()) as ApiResponse<T>
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error?.message || '请求失败，请稍后重试。')
+    throw new Error(payload?.error?.message || fallbackRequestErrorMessage(url, response.status))
   }
   return payload.data as T
 }
 
 export const api = {
-  login(username: string, password: string) {
+  async login(username: string, password: string) {
+    const passwordSha256 = await sha256Hex(password)
     return request<CurrentUser>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, passwordSha256 }),
     })
   },
   logout() {
@@ -48,10 +75,15 @@ export const api = {
   getConfig() {
     return request<AppConfig>('/api/config')
   },
-  updateConfig(payload: Partial<AppConfig> & { aria2Secret?: string; newPassword?: string }) {
+  async updateConfig(payload: Partial<AppConfig> & { aria2Secret?: string; newPassword?: string }) {
+    const requestPayload: Record<string, unknown> = { ...payload }
+    if (typeof payload.newPassword === 'string' && payload.newPassword.length > 0) {
+      requestPayload.newPasswordSha256 = await sha256Hex(payload.newPassword)
+      delete requestPayload.newPassword
+    }
     return request<void>('/api/config', {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestPayload),
     })
   },
   aria2<T>(method: string, params: unknown[] = []) {
@@ -81,6 +113,15 @@ export const api = {
   resetManagedAria2Options() {
     return request<ManagedOptionsSaveResult>('/api/aria2/options/reset', {
       method: 'POST',
+    })
+  },
+  getTrackerSubscription() {
+    return request<TrackerSubscriptionState>('/api/tracker-subscription')
+  },
+  updateTrackerSubscription(enabled: boolean, source: string) {
+    return request<TrackerSubscriptionState>('/api/tracker-subscription', {
+      method: 'POST',
+      body: JSON.stringify({ enabled, source }),
     })
   },
   uploadTorrent(file: File, options?: Record<string, string>) {

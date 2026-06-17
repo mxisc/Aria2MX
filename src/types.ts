@@ -16,12 +16,22 @@ export type AppConfig = {
   aria2RpcUrl: string
   hasAria2Secret: boolean
   aria2Managed: boolean
-  managedRpcPort: number
+  rpcOriginCheckMode: 'disabled' | 'same_origin' | 'whitelist'
+  rpcOriginWhitelist: string[]
+  trackerSubscriptionEnabled: boolean
+  trackerSubscriptionSource: string
   mcpEnabled: boolean
   refreshIntervalMs: number
   defaultDownloadDir: string
   theme: 'ariamx'
   colorMode: 'system' | 'light' | 'dark'
+}
+
+export type TrackerSubscriptionState = {
+  enabled: boolean
+  selectedSource: string
+  currentTrackerCount: number
+  message?: string
 }
 
 export type AppAbout = {

@@ -7,15 +7,16 @@ import (
 
 func TestPasswordHashAndVerify(t *testing.T) {
 	salt := "test-salt"
-	hash := HashPassword("secret-pass", salt)
+	passwordSHA256 := SHA256Hex("secret-pass")
+	hash := HashPasswordFromClientSHA256(passwordSHA256, salt)
 	if hash == "" {
 		t.Fatal("expected hash")
 	}
-	if !VerifyPassword("secret-pass", salt, hash) {
-		t.Fatal("expected password to verify")
+	if !VerifyPassword(passwordSHA256, salt, hash, passwordSchemeClientSHA256PBKDF2) {
+		t.Fatal("expected client sha256 password to verify")
 	}
-	if VerifyPassword("wrong-pass", salt, hash) {
-		t.Fatal("wrong password verified")
+	if VerifyPassword(SHA256Hex("wrong-pass"), salt, hash, passwordSchemeClientSHA256PBKDF2) {
+		t.Fatal("wrong client sha256 password verified")
 	}
 }
 
