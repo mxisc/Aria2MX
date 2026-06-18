@@ -13,6 +13,7 @@ export const currentSkinApiTemplate = ref('')
 
 let systemColorSchemeMedia: MediaQueryList | null = null
 let removeSystemColorSchemeListener: (() => void) | null = null
+let skinLoadToken = 0
 
 export function normalizeTheme(value?: string): AppTheme {
   return 'ariamx'
@@ -70,11 +71,6 @@ function escapeCSSURL(url: string) {
   return `url(${JSON.stringify(url)})`
 }
 
-function buildSkinProxyURL(skinName: string, apiTemplate: string) {
-  const cacheKey = encodeURIComponent(`${skinName}|${apiTemplate}`)
-  return `/api/skin-image?v=${cacheKey}`
-}
-
 function resolveSkinImageURL(enabled?: boolean, skinName?: string, apiTemplate?: string) {
   if (!enabled) return ''
   const template = (apiTemplate || '').trim()
@@ -86,24 +82,51 @@ function resolveSkinImageURL(enabled?: boolean, skinName?: string, apiTemplate?:
   return template
 }
 
+function applySkinImageElement(imageUrl: string) {
+  document.documentElement.style.setProperty('--skin-image', imageUrl ? escapeCSSURL(imageUrl) : 'none')
+}
+
+function preloadSkinImage(imageUrl: string, token: number) {
+  if (typeof window === 'undefined') {
+    applySkinImageElement(imageUrl)
+    return
+  }
+  const image = new Image()
+  image.decoding = 'async'
+  image.onload = () => {
+    if (token !== skinLoadToken) return
+    applySkinImageElement(imageUrl)
+  }
+  image.onerror = () => {
+    if (token !== skinLoadToken) return
+    applySkinImageElement('')
+  }
+  image.src = imageUrl
+}
+
 export function applySkin(enabled?: boolean, skinName?: string, apiTemplate?: string) {
   const normalizedEnabled = Boolean(enabled)
   const normalizedName = (skinName || 'default').trim() || 'default'
   const normalizedTemplate = (apiTemplate || '').trim()
   const resolvedURL = resolveSkinImageURL(normalizedEnabled, normalizedName, normalizedTemplate)
-  const skinImageURL = resolvedURL ? buildSkinProxyURL(normalizedName, normalizedTemplate) : ''
   currentSkinEnabled.value = normalizedEnabled && resolvedURL.length > 0
   currentSkinName.value = normalizedName
   currentSkinApiTemplate.value = normalizedTemplate
   const skinState = currentSkinEnabled.value ? 'custom' : 'none'
   document.documentElement.dataset.skin = skinState
   document.body.dataset.skin = skinState
-  document.documentElement.style.setProperty('--skin-image', currentSkinEnabled.value ? escapeCSSURL(skinImageURL) : 'none')
+  skinLoadToken += 1
+  if (currentSkinEnabled.value) {
+    applySkinImageElement('')
+    preloadSkinImage(resolvedURL, skinLoadToken)
+  } else {
+    applySkinImageElement('')
+  }
   return {
     skinEnabled: currentSkinEnabled.value,
     skinName: normalizedName,
     skinApiTemplate: normalizedTemplate,
-    skinImageUrl: skinImageURL,
+    skinImageUrl: resolvedURL,
   }
 }
 

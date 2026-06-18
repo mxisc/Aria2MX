@@ -87,7 +87,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/about", s.withAuth(s.handleAbout))
 	mux.HandleFunc("/api/panel-style", s.handlePanelStyle)
 	mux.HandleFunc("/api/config", s.withAuth(s.handleConfig))
-	mux.HandleFunc("/api/skin-image", s.handleSkinImage)
 	mux.HandleFunc("/api/aria2/options", s.withAuth(s.handleAria2Options))
 	mux.HandleFunc("/api/aria2/options/reset", s.withAuth(s.handleAria2OptionsReset))
 	mux.HandleFunc("/api/aria2/call", s.withAuth(s.handleAria2Call))

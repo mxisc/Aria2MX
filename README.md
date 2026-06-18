@@ -139,7 +139,7 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 
 登录后可在“设置”页切换 `AriaMX` 皮肤的 `跟随系统` / `浅色模式` / `深色模式`。显示模式会写入 `ariamx.json` 的 `panel.theme` / `panel.colorMode`，后续登录会继续沿用；选择“跟随系统”后，系统深浅色变化会实时同步到面板。
 
-“设置”页还支持背景图片配置：可单独保存 `panel.skinEnabled`、`panel.skinName` 和 `panel.skinApiTemplate`。开启后，面板会通过同源 `/api/skin-image` 代理拉取图片，并把它应用到登录页和主面板背景。这样可以兼容会重定向、响应头不规范，或会从 HTTPS 跳到 HTTP 的图片 API；但上游接口最终仍需返回真实图片内容。
+“设置”页还支持背景图片配置：可单独保存 `panel.skinEnabled`、`panel.skinName` 和 `panel.skinApiTemplate`。开启后，浏览器会直接请求解析后的图片地址，并把它应用到登录页和主面板背景。图片地址需要能被浏览器直接访问，且在 HTTPS 页面里最终仍返回真实图片内容；如果接口会跳到 HTTP、需要额外鉴权，或最终返回的不是图片，背景就不会显示。
 
 如果直链任务因为旧的 `.aria2` 控制文件与当前分片信息冲突而失败，面板会直接提示这是续传控制文件冲突；对失败任务点击“重新开始”时，面板会自动挪开冲突的 `.aria2` 控制文件后再重建任务。
 

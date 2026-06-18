@@ -187,7 +187,7 @@ async function testConnection() {
             >
           </label>
           <p class="hint settings-field-span-2">
-            支持图片直链或返回图片内容的 API。面板会通过同源地址代理加载并应用为登录页和管理后台的背景图片。
+            支持图片直链或直接返回图片内容的 HTTPS 地址。背景图由浏览器直接加载；如果接口会跳到 HTTP、要求特殊鉴权，或最终不返回图片，页面就不会显示。
           </p>
         </div>
       </article>
