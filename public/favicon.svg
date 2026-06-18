@@ -10,7 +10,7 @@
   </linearGradient>
 </defs>
 <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#bg)"/>
-<rect x="5" y="5" width="54" height="54" rx="17" stroke="rgba(148, 163, 184, 0.16)" stroke-width="2"/>
+<rect x="5" y="5" width="54" height="54" rx="17" stroke="#94A3B8" stroke-opacity="0.16" stroke-width="2"/>
 <path d="M18 48L27.25 16H34L24.75 48H18Z" fill="url(#mark)"/>
 <path d="M46 48L36.75 16H30L39.25 48H46Z" fill="url(#mark)"/>
 <rect x="25" y="29" width="14" height="6" rx="3" fill="#A7F3D0"/>

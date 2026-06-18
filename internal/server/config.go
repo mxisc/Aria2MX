@@ -49,6 +49,9 @@ type PanelConfig struct {
 	MCPEnabled                 bool     `json:"mcpEnabled"`
 	Theme                      string   `json:"theme"`
 	ColorMode                  string   `json:"colorMode,omitempty"`
+	SkinEnabled                bool     `json:"skinEnabled,omitempty"`
+	SkinName                   string   `json:"skinName,omitempty"`
+	SkinAPITemplate            string   `json:"skinApiTemplate,omitempty"`
 }
 
 type PeerGuardConfig struct {
@@ -123,6 +126,7 @@ func LoadConfig(path string) (*Config, error) {
 			MCPEnabled:         true,
 			Theme:              "ariamx",
 			ColorMode:          "system",
+			SkinName:           "default",
 		},
 	}
 	if rpcURL := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_RPC")); rpcURL != "" {
@@ -244,6 +248,23 @@ func normalizeConfig(cfg *Config) bool {
 	}
 	if legacyTheme != "ariamx" {
 		cfg.Panel.Theme = "ariamx"
+		mutated = true
+	}
+	skinName := strings.TrimSpace(cfg.Panel.SkinName)
+	if skinName == "" {
+		skinName = "default"
+	}
+	if cfg.Panel.SkinName != skinName {
+		cfg.Panel.SkinName = skinName
+		mutated = true
+	}
+	skinTemplate := strings.TrimSpace(cfg.Panel.SkinAPITemplate)
+	if cfg.Panel.SkinAPITemplate != skinTemplate {
+		cfg.Panel.SkinAPITemplate = skinTemplate
+		mutated = true
+	}
+	if cfg.Panel.SkinEnabled && skinTemplate == "" {
+		cfg.Panel.SkinEnabled = false
 		mutated = true
 	}
 	normalizedPeers := normalizePeerBanRecords(cfg.PeerGuard.BlockedPeers)

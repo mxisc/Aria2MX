@@ -40,6 +40,15 @@ func TestLoadConfigCreatesDefaultFile(t *testing.T) {
 	if cfg.Panel.ColorMode != "system" {
 		t.Fatalf("expected default color mode system, got %q", cfg.Panel.ColorMode)
 	}
+	if cfg.Panel.SkinEnabled {
+		t.Fatal("expected skin to be disabled by default")
+	}
+	if cfg.Panel.SkinName != "default" {
+		t.Fatalf("expected default skin name default, got %q", cfg.Panel.SkinName)
+	}
+	if cfg.Panel.SkinAPITemplate != "" {
+		t.Fatalf("expected empty skin api template, got %q", cfg.Panel.SkinAPITemplate)
+	}
 	if cfg.Panel.RPCOriginCheckMode != panelRPCOriginModeSameOrigin {
 		t.Fatalf("expected default rpc origin check mode same_origin, got %q", cfg.Panel.RPCOriginCheckMode)
 	}
@@ -110,6 +119,47 @@ func TestLoadConfigMigratesManagedRPCPortFromOptions(t *testing.T) {
 	}
 	if cfg.Panel.ColorMode != "system" {
 		t.Fatalf("expected migrated color mode system, got %q", cfg.Panel.ColorMode)
+	}
+	if cfg.Panel.SkinName != "default" {
+		t.Fatalf("expected migrated skin name default, got %q", cfg.Panel.SkinName)
+	}
+}
+
+func TestLoadConfigDisablesSkinWithoutTemplate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ariamx.json")
+	if err := os.WriteFile(path, []byte(`{
+  "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
+  "aria2": {
+    "managed": true,
+    "rpcUrl": "http://127.0.0.1:16800/jsonrpc",
+    "rpcSecret": "secret",
+    "managedRpcPort": 16800
+  },
+  "panel": {
+    "refreshIntervalMs": 1500,
+    "sessionTTLSeconds": 86400,
+    "theme": "ariamx",
+    "colorMode": "light",
+    "skinEnabled": true,
+    "skinName": "  aurora  ",
+    "skinApiTemplate": "   "
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Panel.SkinEnabled {
+		t.Fatal("expected skin to be disabled when template is empty")
+	}
+	if cfg.Panel.SkinName != "aurora" {
+		t.Fatalf("expected trimmed skin name aurora, got %q", cfg.Panel.SkinName)
+	}
+	if cfg.Panel.SkinAPITemplate != "" {
+		t.Fatalf("expected trimmed empty skin template, got %q", cfg.Panel.SkinAPITemplate)
 	}
 }
 

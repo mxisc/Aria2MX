@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from './api'
-import { applyTheme } from './theme'
+import { applySkin, applyTheme } from './theme'
 
 const router = useRouter()
 const ready = ref(false)
@@ -12,11 +12,11 @@ onMounted(async () => {
   try {
     await api.me()
     authenticated.value = true
-    await loadTheme()
+    await loadPrivateTheme()
     if (router.currentRoute.value.path === '/login') await router.replace('/')
   } catch {
     authenticated.value = false
-    applyTheme('ariamx', 'system')
+    await loadPublicTheme()
     await router.replace('/login')
   } finally {
     ready.value = true
@@ -25,22 +25,34 @@ onMounted(async () => {
 
 async function onAuthenticated() {
   authenticated.value = true
-  await loadTheme()
+  await loadPrivateTheme()
   await router.replace('/')
 }
 
 async function onLoggedOut() {
   authenticated.value = false
-  applyTheme('ariamx', 'system')
+  await loadPublicTheme()
   await router.replace('/login')
 }
 
-async function loadTheme() {
+async function loadPrivateTheme() {
   try {
     const config = await api.getConfig()
     applyTheme(config.theme, config.colorMode)
+    applySkin(config.skinEnabled, config.skinName, config.skinApiTemplate)
+  } catch {
+    await loadPublicTheme()
+  }
+}
+
+async function loadPublicTheme() {
+  try {
+    const config = await api.getPublicPanelStyle()
+    applyTheme(config.theme, config.colorMode)
+    applySkin(config.skinEnabled, config.skinName, config.skinApiTemplate)
   } catch {
     applyTheme('ariamx', 'system')
+    applySkin(false, 'default', '')
   }
 }
 </script>

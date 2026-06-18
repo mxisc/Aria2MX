@@ -227,9 +227,13 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
     <aside class="sidebar">
       <div class="sidebar-main">
         <div class="sidebar-brand">
-          <strong>AriaMX</strong>
-          <span>面板 v{{ about.panelVersion || '-' }}</span>
-          <span>aria2 v{{ about.aria2Version || '-' }}</span>
+            <div class="sidebar-brand-mark" aria-hidden="true">
+              <span class="sidebar-brand-core">A</span>
+            </div>
+            <div class="sidebar-brand-copy">
+              <strong>AriaMX</strong>
+              <span>下载控制面板</span>
+            </div>
         </div>
         <nav class="sidebar-nav">
           <button :class="{ active: activePage === 'overview' }" @click="activePage = 'overview'">

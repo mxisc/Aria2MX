@@ -148,7 +148,7 @@ async function save() {
   min-height: 0;
   border: 1px solid var(--soft-line);
   border-radius: 12px;
-  background: var(--panel);
+  background: var(--node-subscription-card-bg, var(--panel));
   padding: 16px;
 }
 
@@ -234,5 +234,15 @@ async function save() {
   justify-content: center;
   gap: 8px;
   text-decoration: none;
+}
+
+:global([data-skin='custom']) .node-subscription-card {
+  --node-subscription-card-bg: color-mix(in srgb, var(--panel) 18%, transparent);
+  border-color: color-mix(in srgb, var(--soft-line) 26%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-clip: padding-box;
+  isolation: isolate;
+  box-shadow: none;
 }
 </style>

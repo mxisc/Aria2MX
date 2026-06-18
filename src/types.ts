@@ -25,6 +25,17 @@ export type AppConfig = {
   defaultDownloadDir: string
   theme: 'ariamx'
   colorMode: 'system' | 'light' | 'dark'
+  skinEnabled: boolean
+  skinName: string
+  skinApiTemplate: string
+}
+
+export type PublicPanelStyle = {
+  theme: 'ariamx'
+  colorMode: 'system' | 'light' | 'dark'
+  skinEnabled: boolean
+  skinName: string
+  skinApiTemplate: string
 }
 
 export type TrackerSubscriptionState = {

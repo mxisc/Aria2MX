@@ -1,4 +1,4 @@
-import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot, TrackerSubscriptionState } from './types'
+import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot, PublicPanelStyle, TrackerSubscriptionState } from './types'
 
 class AuthRedirectError extends Error {
   constructor() {
@@ -74,6 +74,9 @@ export const api = {
   },
   getConfig() {
     return request<AppConfig>('/api/config')
+  },
+  getPublicPanelStyle() {
+    return request<PublicPanelStyle>('/api/panel-style')
   },
   async updateConfig(payload: Partial<AppConfig> & { aria2Secret?: string; newPassword?: string }) {
     const requestPayload: Record<string, unknown> = { ...payload }

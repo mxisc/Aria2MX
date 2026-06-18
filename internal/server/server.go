@@ -85,7 +85,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/auth/logout", s.withAuth(s.handleLogout))
 	mux.HandleFunc("/api/auth/me", s.withAuth(s.handleMe))
 	mux.HandleFunc("/api/about", s.withAuth(s.handleAbout))
+	mux.HandleFunc("/api/panel-style", s.handlePanelStyle)
 	mux.HandleFunc("/api/config", s.withAuth(s.handleConfig))
+	mux.HandleFunc("/api/skin-image", s.handleSkinImage)
 	mux.HandleFunc("/api/aria2/options", s.withAuth(s.handleAria2Options))
 	mux.HandleFunc("/api/aria2/options/reset", s.withAuth(s.handleAria2OptionsReset))
 	mux.HandleFunc("/api/aria2/call", s.withAuth(s.handleAria2Call))
@@ -109,6 +111,23 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if s.managed != nil {
 		data["aria2Managed"] = true
 	}
+	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
+}
+
+func (s *Server) handlePanelStyle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	s.cfgMu.RLock()
+	data := map[string]interface{}{
+		"theme":           s.cfg.Panel.Theme,
+		"colorMode":       s.cfg.Panel.ColorMode,
+		"skinEnabled":     s.cfg.Panel.SkinEnabled,
+		"skinName":        s.cfg.Panel.SkinName,
+		"skinApiTemplate": s.cfg.Panel.SkinAPITemplate,
+	}
+	s.cfgMu.RUnlock()
 	writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
 }
 
@@ -239,6 +258,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			"defaultDownloadDir":         cfg.Panel.DefaultDownloadDir,
 			"theme":                      cfg.Panel.Theme,
 			"colorMode":                  cfg.Panel.ColorMode,
+			"skinEnabled":                cfg.Panel.SkinEnabled,
+			"skinName":                   cfg.Panel.SkinName,
+			"skinApiTemplate":            cfg.Panel.SkinAPITemplate,
 		}
 		s.cfgMu.RUnlock()
 		writeJSON(w, http.StatusOK, apiResponse{OK: true, Data: data})
@@ -255,6 +277,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			MCPEnabled                 *bool     `json:"mcpEnabled"`
 			Theme                      *string   `json:"theme"`
 			ColorMode                  *string   `json:"colorMode"`
+			SkinEnabled                *bool     `json:"skinEnabled"`
+			SkinName                   *string   `json:"skinName"`
+			SkinAPITemplate            *string   `json:"skinApiTemplate"`
 			NewPasswordSHA256          *string   `json:"newPasswordSha256"`
 		}
 		if err := readJSON(r, &payload); err != nil {
@@ -299,6 +324,15 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if payload.ColorMode != nil && (*payload.ColorMode == "system" || *payload.ColorMode == "light" || *payload.ColorMode == "dark") {
 			s.cfg.Panel.ColorMode = *payload.ColorMode
+		}
+		if payload.SkinName != nil {
+			s.cfg.Panel.SkinName = strings.TrimSpace(*payload.SkinName)
+		}
+		if payload.SkinAPITemplate != nil {
+			s.cfg.Panel.SkinAPITemplate = strings.TrimSpace(*payload.SkinAPITemplate)
+		}
+		if payload.SkinEnabled != nil {
+			s.cfg.Panel.SkinEnabled = *payload.SkinEnabled
 		}
 		if payload.NewPasswordSHA256 != nil && IsSHA256Hex(*payload.NewPasswordSHA256) {
 			salt, err := randomHex(16)

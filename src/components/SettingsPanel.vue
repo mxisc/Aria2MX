@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Settings } from 'lucide-vue-next'
 import { api } from '@/api'
-import { applyTheme, type ColorMode } from '@/theme'
+import { applySkin, applyTheme, type ColorMode } from '@/theme'
 
 const emit = defineEmits<{ saved: [refreshIntervalMs: number] }>()
 
@@ -11,6 +11,9 @@ const aria2Secret = ref('')
 const refreshIntervalMs = ref(1500)
 const defaultDownloadDir = ref('')
 const colorMode = ref<ColorMode>('system')
+const skinEnabled = ref(false)
+const skinName = ref('default')
+const skinApiTemplate = ref('')
 const mcpEnabled = ref(true)
 const rpcOriginCheckMode = ref<'disabled' | 'same_origin' | 'whitelist'>('same_origin')
 const rpcOriginWhitelistText = ref('')
@@ -49,12 +52,16 @@ async function load() {
   refreshIntervalMs.value = config.refreshIntervalMs
   defaultDownloadDir.value = config.defaultDownloadDir
   colorMode.value = config.colorMode
+  skinEnabled.value = config.skinEnabled
+  skinName.value = config.skinName
+  skinApiTemplate.value = config.skinApiTemplate
   mcpEnabled.value = config.mcpEnabled
   rpcOriginCheckMode.value = config.rpcOriginCheckMode
   rpcOriginWhitelistText.value = config.rpcOriginWhitelist.join('\n')
   hasSecret.value = config.hasAria2Secret
   aria2Managed.value = config.aria2Managed
   applyTheme(config.theme, config.colorMode)
+  applySkin(config.skinEnabled, config.skinName, config.skinApiTemplate)
 }
 
 async function save() {
@@ -68,6 +75,9 @@ async function save() {
       rpcOriginCheckMode: rpcOriginCheckMode.value,
       theme: 'ariamx',
       colorMode: colorMode.value,
+      skinEnabled: skinEnabled.value,
+      skinName: skinName.value,
+      skinApiTemplate: skinApiTemplate.value,
       newPassword: newPassword.value || undefined,
       rpcOriginWhitelist: rpcOriginWhitelistText.value
         .split('\n')
@@ -158,6 +168,27 @@ async function testConnection() {
               </option>
             </select>
           </label>
+          <label>
+            <span>背景图片</span>
+            <select v-model="skinEnabled">
+              <option :value="false">
+                关闭
+              </option>
+              <option :value="true">
+                开启
+              </option>
+            </select>
+          </label>
+          <label class="settings-field-span-2">
+            <span>背景图片地址</span>
+            <input
+              v-model="skinApiTemplate"
+              placeholder="填写图片直链或返回图片内容的 API 地址"
+            >
+          </label>
+          <p class="hint settings-field-span-2">
+            支持图片直链或返回图片内容的 API。面板会通过同源地址代理加载并应用为登录页和管理后台的背景图片。
+          </p>
         </div>
       </article>
 
