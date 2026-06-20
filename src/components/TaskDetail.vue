@@ -120,26 +120,6 @@ const blockCells = computed<BlockCell[]>(() => {
   }
   return buildExactPieceCells(bitfield, numPieces)
 })
-const completedPieceCount = computed(() => blockCells.value.reduce((sum, cell) => sum + cell.completed, 0))
-const blockSummary = computed(() => {
-  const { numPieces, pieceLength } = blockStatusView.value
-  return [
-    { key: 'pieces', label: '总分片', value: numPieces > 0 ? numberText(numPieces) : '-' },
-    { key: 'done', label: '已完成分片', value: numPieces > 0 ? `${numberText(completedPieceCount.value)} / ${numberText(numPieces)}` : '-' },
-    { key: 'pieceLength', label: '单片大小', value: pieceLength > 0 ? bytes(pieceLength) : '-' },
-    {
-      key: 'density',
-      label: '显示精度',
-      value: blockMapMode.value === 'exact'
-        ? '1 格 / 1 分片'
-        : blockMapMode.value === 'estimated'
-          ? '估算图'
-          : blockMapMode.value === 'progress'
-            ? '进度图'
-            : '-',
-    },
-  ]
-})
 const selectedFiles = computed(() => (props.task?.files || []).filter((file) => file.selected === 'true').map((file) => file.index).join(','))
 const overviewItems = computed(() => {
   if (!props.task) return []
@@ -581,16 +561,6 @@ function cellFillStyle(cell: BlockCell) {
         </div>
 
         <div v-else-if="tab === 'blocks'" class="block-panel">
-          <div class="detail-grid block-summary-grid">
-            <div
-              v-for="item in blockSummary"
-              :key="item.key"
-              class="detail-cell"
-            >
-              <span class="detail-cell-label">{{ item.label }}</span>
-              <strong class="detail-cell-value">{{ item.value }}</strong>
-            </div>
-          </div>
           <p v-if="blockMapMode === 'estimated'" class="block-note">
             当前 aria2 没有返回 bitfield，下面显示的是估算图，不是 AriaNg 那种逐分片地图。
           </p>

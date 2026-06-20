@@ -196,14 +196,14 @@ func (s *Server) executePanelRPC(req panelRPCRequest, outerAuthorized bool) (pan
 		response.Error = &panelRPCError{Code: -32600, Message: "请检查 RPC 请求内容后重试。"}
 		return response, len(req.ID) > 0
 	}
-	if !outerAuthorized && !s.matchesPanelRPCParamSecret(req.Params) {
+	if !outerAuthorized && !s.matchesPanelRPCParamSecret(req.Method, req.Params) {
 		response.Error = &panelRPCError{Code: -32001, Message: errPanelRPCUnauthorized.Error()}
 		return response, len(req.ID) > 0
 	}
 
 	result, err := s.aria2.Call(Aria2CallRequest{
 		Method: req.Method,
-		Params: sanitizePanelRPCParams(req.Params),
+		Params: sanitizePanelRPCParams(req.Method, req.Params),
 	})
 	if err != nil {
 		response.Error = &panelRPCError{Code: -32000, Message: "aria2 暂时不可用，请检查连接设置。"}
@@ -213,12 +213,41 @@ func (s *Server) executePanelRPC(req panelRPCRequest, outerAuthorized bool) (pan
 	return response, len(req.ID) > 0
 }
 
-func sanitizePanelRPCParams(params []interface{}) []interface{} {
+func sanitizePanelRPCParams(method string, params []interface{}) []interface{} {
+	sanitized := trimLeadingRPCSecret(params)
+	if method != "system.multicall" || len(sanitized) == 0 {
+		return sanitized
+	}
+	calls, ok := sanitized[0].([]interface{})
+	if !ok {
+		return sanitized
+	}
+	nextCalls := make([]interface{}, 0, len(calls))
+	for _, call := range calls {
+		callMap, ok := call.(map[string]interface{})
+		if !ok {
+			nextCalls = append(nextCalls, call)
+			continue
+		}
+		nextCall := make(map[string]interface{}, len(callMap))
+		for key, value := range callMap {
+			nextCall[key] = value
+		}
+		if childParams, ok := callMap["params"].([]interface{}); ok {
+			nextCall["params"] = trimLeadingRPCSecret(childParams)
+		}
+		nextCalls = append(nextCalls, nextCall)
+	}
+	next := append([]interface{}{}, sanitized...)
+	next[0] = nextCalls
+	return next
+}
+
+func trimLeadingRPCSecret(params []interface{}) []interface{} {
 	if len(params) == 0 {
 		return params
 	}
-	first, ok := params[0].(string)
-	if ok && len(first) > 6 && first[:6] == "token:" {
+	if token, ok := params[0].(string); ok && strings.HasPrefix(token, "token:") {
 		return params[1:]
 	}
 	return params
@@ -231,15 +260,36 @@ func (s *Server) panelRPCOuterAuthorized(r *http.Request) bool {
 	return s.matchesPanelRPCSecret(r)
 }
 
-func (s *Server) matchesPanelRPCParamSecret(params []interface{}) bool {
+func (s *Server) matchesPanelRPCParamSecret(method string, params []interface{}) bool {
 	if len(params) == 0 {
 		return false
 	}
 	token, ok := params[0].(string)
-	if !ok || len(token) <= 6 || token[:6] != "token:" {
+	if ok && strings.HasPrefix(token, "token:") {
+		return s.matchesPanelRPCSecretValue(token[6:])
+	}
+	if method != "system.multicall" {
 		return false
 	}
-	return s.matchesPanelRPCSecretValue(token[6:])
+	calls, ok := params[0].([]interface{})
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, call := range calls {
+		callMap, ok := call.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		childParams, ok := callMap["params"].([]interface{})
+		if !ok || len(childParams) == 0 {
+			return false
+		}
+		token, ok := childParams[0].(string)
+		if !ok || !strings.HasPrefix(token, "token:") || !s.matchesPanelRPCSecretValue(token[6:]) {
+			return false
+		}
+	}
+	return true
 }
 
 func readLimitedBytes(reader interface{ Read([]byte) (int, error) }) ([]byte, error) {

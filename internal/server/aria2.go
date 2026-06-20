@@ -36,11 +36,7 @@ func (c *Aria2Client) Call(req Aria2CallRequest) (interface{}, error) {
 		return nil, errors.New("method is not allowed")
 	}
 	cfg := c.config()
-	params := make([]interface{}, 0, len(req.Params)+1)
-	if cfg.RPCSecret != "" {
-		params = append(params, "token:"+cfg.RPCSecret)
-	}
-	params = append(params, req.Params...)
+	params := aria2RPCParams(req.Method, req.Params, cfg.RPCSecret)
 
 	payload := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -85,6 +81,61 @@ func (c *Aria2Client) Call(req Aria2CallRequest) (interface{}, error) {
 		return nil, fmt.Errorf("aria2 error %d: %s", decoded.Error.Code, decoded.Error.Message)
 	}
 	return localizeAria2Result(req.Method, decoded.Result), nil
+}
+
+func aria2RPCParams(method string, params []interface{}, secret string) []interface{} {
+	if secret == "" {
+		return params
+	}
+	token := "token:" + secret
+	if method != "system.multicall" {
+		next := make([]interface{}, 0, len(params)+1)
+		next = append(next, token)
+		next = append(next, params...)
+		return next
+	}
+	if len(params) == 0 {
+		return params
+	}
+	calls, ok := params[0].([]interface{})
+	if !ok {
+		return params
+	}
+	nextCalls := make([]interface{}, 0, len(calls))
+	for _, call := range calls {
+		callMap, ok := call.(map[string]interface{})
+		if !ok {
+			nextCalls = append(nextCalls, call)
+			continue
+		}
+		nextCall := make(map[string]interface{}, len(callMap))
+		for key, value := range callMap {
+			nextCall[key] = value
+		}
+		methodName, _ := callMap["methodName"].(string)
+		if strings.HasPrefix(methodName, "aria2.") {
+			childParams, _ := callMap["params"].([]interface{})
+			nextCall["params"] = prependOrReplaceAria2Token(childParams, token)
+		}
+		nextCalls = append(nextCalls, nextCall)
+	}
+	next := append([]interface{}{}, params...)
+	next[0] = nextCalls
+	return next
+}
+
+func prependOrReplaceAria2Token(params []interface{}, token string) []interface{} {
+	if len(params) > 0 {
+		if first, ok := params[0].(string); ok && strings.HasPrefix(first, "token:") {
+			next := append([]interface{}{}, params...)
+			next[0] = token
+			return next
+		}
+	}
+	next := make([]interface{}, 0, len(params)+1)
+	next = append(next, token)
+	next = append(next, params...)
+	return next
 }
 
 func (c *Aria2Client) AddTorrent(r io.Reader, options map[string]string) (interface{}, error) {

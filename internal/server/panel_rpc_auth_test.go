@@ -42,6 +42,59 @@ func TestHandlePanelRPCAcceptsAriaNgStylePanelSecret(t *testing.T) {
 	}
 }
 
+func TestHandlePanelRPCMulticallMovesTopLevelSecretIntoChildCalls(t *testing.T) {
+	server, observed, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	req := httptest.NewRequest(http.MethodPost, "/jsonrpc", strings.NewReader(`{"jsonrpc":"2.0","id":"multi","method":"system.multicall","params":["token:panel-secret",[{"methodName":"aria2.getGlobalStat","params":[]}]]}`))
+	recorder := httptest.NewRecorder()
+
+	server.handlePanelRPC(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+	assertPanelRPCResult(t, recorder)
+	assertObservedMulticallChildToken(t, observed, "token:aria-secret")
+}
+
+func TestHandlePanelRPCMulticallAcceptsChildCallSecrets(t *testing.T) {
+	server, observed, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	req := httptest.NewRequest(http.MethodPost, "/jsonrpc", strings.NewReader(`{"jsonrpc":"2.0","id":"multi","method":"system.multicall","params":[[{"methodName":"aria2.getGlobalStat","params":["token:panel-secret"]}]]}`))
+	recorder := httptest.NewRecorder()
+
+	server.handlePanelRPC(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+	assertPanelRPCResult(t, recorder)
+	assertObservedMulticallChildToken(t, observed, "token:aria-secret")
+}
+
+func TestHandlePanelRPCMulticallRejectsWrongChildCallSecret(t *testing.T) {
+	server, _, closeFn := newPanelRPCTestServer(t)
+	defer closeFn()
+
+	req := httptest.NewRequest(http.MethodPost, "/jsonrpc", strings.NewReader(`{"jsonrpc":"2.0","id":"multi","method":"system.multicall","params":[[{"methodName":"aria2.getGlobalStat","params":["token:wrong-secret"]}]]}`))
+	recorder := httptest.NewRecorder()
+
+	server.handlePanelRPC(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+	var payload panelRPCResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Error == nil || payload.Error.Code != -32001 {
+		t.Fatalf("expected unauthorized panel rpc error, got %#v", payload.Error)
+	}
+}
+
 func TestHandlePanelRPCRejectsWrongPanelSecret(t *testing.T) {
 	server, _, closeFn := newPanelRPCTestServer(t)
 	defer closeFn()
@@ -239,5 +292,30 @@ func assertPanelRPCResult(t *testing.T, recorder *httptest.ResponseRecorder) {
 	}
 	if payload.Error != nil {
 		t.Fatalf("expected no rpc error, got %#v", payload.Error)
+	}
+}
+
+func assertObservedMulticallChildToken(t *testing.T, observed *observedRPCRequest, want string) {
+	t.Helper()
+	if observed.Method != "system.multicall" {
+		t.Fatalf("expected system.multicall, got %q", observed.Method)
+	}
+	if len(observed.Params) != 1 {
+		t.Fatalf("expected one multicall param, got %#v", observed.Params)
+	}
+	calls, ok := observed.Params[0].([]interface{})
+	if !ok || len(calls) != 1 {
+		t.Fatalf("expected one child call, got %#v", observed.Params[0])
+	}
+	call, ok := calls[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected child call map, got %#v", calls[0])
+	}
+	params, ok := call["params"].([]interface{})
+	if !ok || len(params) == 0 {
+		t.Fatalf("expected child params, got %#v", call["params"])
+	}
+	if params[0] != want {
+		t.Fatalf("expected child token %q, got %#v", want, params)
 	}
 }
