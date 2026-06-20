@@ -47,6 +47,10 @@ var managedRestartOptionKeys = map[string]struct{}{
 	"min-tls-version":          {},
 	"netrc-path":               {},
 	"no-conf":                  {},
+	"on-bt-download-complete":  {},
+	"on-download-complete":     {},
+	"on-download-error":        {},
+	"on-download-stop":         {},
 	"peer-agent":               {},
 	"peer-id-prefix":           {},
 	"quiet":                    {},
@@ -468,6 +472,10 @@ func (m *ManagedAria2) startLocked() error {
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), runtimeEnv...)
+	if configPath, err := filepath.Abs(m.configPath); err == nil {
+		cmd.Env = append(cmd.Env, "ARIAMX_CONFIG_PATH="+configPath)
+	}
+	cmd.Env = append(cmd.Env, "ARIAMX_STATE_DIR="+root)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 

@@ -61,6 +61,17 @@ export type ManagedOptionsSaveResult = {
   message: string
 }
 
+export type ScriptHookItem = {
+  key: string
+  title: string
+  content: string
+}
+
+export type ScriptHookState = {
+  hooks: ScriptHookItem[]
+  message?: string
+}
+
 export type PeerBanRecord = {
   ip: string
   reason?: string

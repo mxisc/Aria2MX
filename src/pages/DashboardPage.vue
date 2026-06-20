@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Activity, ArrowLeft, Blocks, Eraser, Gauge, Info, Link2, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, Shield, SlidersHorizontal } from 'lucide-vue-next'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue'
+import { Activity, ArrowLeft, Blocks, Eraser, FileCode2, Gauge, Info, Link2, ListTree, LogOut, Pause, Play, Plus, Save, Search, Settings, Shield, SlidersHorizontal } from 'lucide-vue-next'
 import { api, fetchDashboard } from '@/api'
 import AddTaskPanel from '@/components/AddTaskPanel.vue'
 import Aria2OptionsPanel from '@/components/Aria2OptionsPanel.vue'
@@ -17,6 +17,7 @@ import type { AppAbout, Aria2Task, GlobalStat, TaskBucket } from '@/types'
 import { percent, speed, taskName } from '@/utils/format'
 
 const emit = defineEmits<{ loggedOut: [] }>()
+const ScriptSettingsPanel = defineAsyncComponent(() => import('@/components/ScriptSettingsPanel.vue'))
 
 const active = ref<Aria2Task[]>([])
 const waiting = ref<Aria2Task[]>([])
@@ -24,7 +25,7 @@ const stopped = ref<Aria2Task[]>([])
 const stat = ref<GlobalStat>({ downloadSpeed: '0', uploadSpeed: '0', numActive: '0', numWaiting: '0', numStopped: '0' })
 const selected = ref<Aria2Task>()
 const bucket = ref<TaskBucket>('active')
-const activePage = ref<'overview' | 'tasks' | 'taskDetail' | 'add' | 'subscriptions' | 'options' | 'peerGuard' | 'connection' | 'mcp' | 'settings'>('overview')
+const activePage = ref<'overview' | 'tasks' | 'taskDetail' | 'add' | 'subscriptions' | 'options' | 'scripts' | 'peerGuard' | 'connection' | 'mcp' | 'settings'>('overview')
 const query = ref('')
 const sortBy = ref<'name' | 'progress' | 'speed' | 'size'>('name')
 const error = ref('')
@@ -39,6 +40,7 @@ const pageMeta = {
   add: { title: '新建任务', subtitle: '提交链接、磁力或种子文件。', badge: '新建任务' },
   subscriptions: { title: '节点订阅', subtitle: '选择内置订阅源并写入 aria2 的 bt-tracker。', badge: '节点订阅' },
   options: { title: 'Aria2', subtitle: '按分类维护 aria2 全局参数。', badge: 'Aria2' },
+  scripts: { title: '脚本设置', subtitle: '编辑任务完成后自动执行的脚本。', badge: '脚本设置' },
   peerGuard: { title: '节点防护', subtitle: '识别高风险 Peer 并通过系统防火墙封禁。', badge: '节点防护' },
   connection: { title: '连接信息', subtitle: '查看当前面板代理、内置 RPC、MCP 和版本信息。', badge: '连接信息' },
   mcp: { title: 'MCP', subtitle: '查看 MCP 可用工具。', badge: 'MCP' },
@@ -260,6 +262,9 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
           <button :class="{ active: activePage === 'options' }" @click="activePage = 'options'">
             <SlidersHorizontal :size="16" /> Aria2
           </button>
+          <button :class="{ active: activePage === 'scripts' }" @click="activePage = 'scripts'">
+            <FileCode2 :size="16" /> 脚本设置
+          </button>
           <button :class="{ active: activePage === 'settings' }" @click="activePage = 'settings'">
             <Settings :size="16" /> 面板设置
           </button>
@@ -422,6 +427,9 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
         </section>
         <section v-else-if="activePage === 'options'" class="page-shell">
           <Aria2OptionsPanel />
+        </section>
+        <section v-else-if="activePage === 'scripts'" class="page-shell">
+          <ScriptSettingsPanel />
         </section>
         <section v-else-if="activePage === 'peerGuard'" class="page-shell">
           <PeerGuardPanel />

@@ -1,4 +1,4 @@
-import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot, PublicPanelStyle, TrackerSubscriptionState } from './types'
+import type { ApiResponse, AppAbout, AppConfig, Aria2Task, CurrentUser, GlobalStat, ManagedOptionsSaveResult, PeerGuardSnapshot, PublicPanelStyle, ScriptHookItem, ScriptHookState, TrackerSubscriptionState } from './types'
 
 class AuthRedirectError extends Error {
   constructor() {
@@ -125,6 +125,15 @@ export const api = {
     return request<TrackerSubscriptionState>('/api/tracker-subscription', {
       method: 'POST',
       body: JSON.stringify({ enabled, source }),
+    })
+  },
+  getScriptHooks() {
+    return request<ScriptHookState>('/api/scripts')
+  },
+  updateScriptHooks(hooks: ScriptHookItem[]) {
+    return request<ScriptHookState>('/api/scripts', {
+      method: 'POST',
+      body: JSON.stringify({ hooks }),
     })
   },
   uploadTorrent(file: File, options?: Record<string, string>) {

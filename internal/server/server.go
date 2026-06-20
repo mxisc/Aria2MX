@@ -94,6 +94,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/aria2/remove", s.withAuth(s.handleAria2Remove))
 	mux.HandleFunc("/api/aria2/upload-torrent", s.withAuth(s.handleTorrentUpload))
 	mux.HandleFunc("/api/tracker-subscription", s.withAuth(s.handleTrackerSubscription))
+	mux.HandleFunc("/api/scripts", s.withAuth(s.handleScriptHooks))
 	mux.HandleFunc("/api/peer-guard", s.withAuth(s.handlePeerGuard))
 	mux.HandleFunc("/api/peer-guard/ban", s.withAuth(s.handlePeerGuardBan))
 	mux.HandleFunc("/api/peer-guard/unban", s.withAuth(s.handlePeerGuardUnban))
