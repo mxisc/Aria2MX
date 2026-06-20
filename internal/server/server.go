@@ -22,16 +22,18 @@ type Options struct {
 }
 
 type Server struct {
-	configPath    string
-	cfg           *Config
-	cfgMu         sync.RWMutex
-	sessions      *SessionStore
-	aria2         *Aria2Client
-	managed       *ManagedAria2
-	assets        embed.FS
-	peerGuard     peerGuardRuntime
-	peerGuardStop chan struct{}
-	peerGuardDone chan struct{}
+	configPath              string
+	cfg                     *Config
+	cfgMu                   sync.RWMutex
+	sessions                *SessionStore
+	aria2                   *Aria2Client
+	managed                 *ManagedAria2
+	assets                  embed.FS
+	peerGuard               peerGuardRuntime
+	peerGuardStop           chan struct{}
+	peerGuardDone           chan struct{}
+	trackerSubscriptionStop chan struct{}
+	trackerSubscriptionDone chan struct{}
 }
 
 type apiResponse struct {
@@ -64,6 +66,7 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 	s.syncTrackerSubscription()
+	s.startTrackerSubscriptionLoop()
 	s.startPeerGuardLoop()
 	if len(s.cfg.PeerGuard.BlockedPeers) > 0 {
 		_ = s.applyPeerGuardFirewall(nil, s.cfg.PeerGuard.BlockedPeers)
@@ -72,6 +75,7 @@ func New(opts Options) (*Server, error) {
 }
 
 func (s *Server) Close() error {
+	s.stopTrackerSubscriptionLoop()
 	s.stopPeerGuardLoop()
 	if s.managed == nil {
 		return nil

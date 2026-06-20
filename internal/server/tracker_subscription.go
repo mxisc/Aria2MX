@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const trackerSubscriptionSyncPeriod = 24 * time.Hour
+
 type trackerSubscriptionSource struct {
 	Key  string
 	Name string
@@ -50,6 +52,36 @@ var trackerSubscriptionSources = map[string]trackerSubscriptionSource{
 func isSupportedTrackerSubscriptionSource(key string) bool {
 	_, ok := trackerSubscriptionSources[key]
 	return ok
+}
+
+func (s *Server) startTrackerSubscriptionLoop() {
+	s.trackerSubscriptionStop = make(chan struct{})
+	s.trackerSubscriptionDone = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(trackerSubscriptionSyncPeriod)
+		defer func() {
+			ticker.Stop()
+			close(s.trackerSubscriptionDone)
+		}()
+		for {
+			select {
+			case <-ticker.C:
+				s.syncTrackerSubscription()
+			case <-s.trackerSubscriptionStop:
+				return
+			}
+		}
+	}()
+}
+
+func (s *Server) stopTrackerSubscriptionLoop() {
+	if s.trackerSubscriptionStop == nil {
+		return
+	}
+	close(s.trackerSubscriptionStop)
+	<-s.trackerSubscriptionDone
+	s.trackerSubscriptionStop = nil
+	s.trackerSubscriptionDone = nil
 }
 
 func (s *Server) handleTrackerSubscription(w http.ResponseWriter, r *http.Request) {

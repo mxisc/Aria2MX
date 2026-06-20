@@ -85,6 +85,58 @@ func TestApplyManagedOptionPatchNormalizesTrackerList(t *testing.T) {
 	}
 }
 
+func TestApplyManagedOptionPatchNormalizesUnitOptions(t *testing.T) {
+	cfg := &Config{
+		Aria2: Aria2Config{
+			Managed:        true,
+			ManagedRPCPort: defaultManagedRPCPort,
+			RPCURL:         managedRPCURL(defaultManagedRPCPort),
+			Options:        map[string]string{},
+		},
+	}
+
+	patch, err := applyManagedOptionPatch(cfg, map[string]string{
+		"disk-cache":                 " 64 m ",
+		"max-download-limit":         "512kb",
+		"max-overall-download-limit": "1.5G",
+	})
+	if err != nil {
+		t.Fatalf("apply patch: %v", err)
+	}
+
+	want := map[string]string{
+		"disk-cache":                 "64M",
+		"max-download-limit":         "512K",
+		"max-overall-download-limit": "1610612736",
+	}
+	for key, value := range want {
+		if got := cfg.Aria2.Options[key]; got != value {
+			t.Fatalf("expected %s option %q, got %q", key, value, got)
+		}
+		if got := patch[key]; got != value {
+			t.Fatalf("expected %s patch %q, got %q", key, value, got)
+		}
+	}
+}
+
+func TestApplyManagedOptionPatchRejectsInvalidUnitOption(t *testing.T) {
+	cfg := &Config{
+		Aria2: Aria2Config{
+			Managed:        true,
+			ManagedRPCPort: defaultManagedRPCPort,
+			RPCURL:         managedRPCURL(defaultManagedRPCPort),
+			Options:        map[string]string{},
+		},
+	}
+
+	if _, err := applyManagedOptionPatch(cfg, map[string]string{"max-download-limit": "1Q"}); err == nil {
+		t.Fatal("expected invalid unit option error")
+	}
+	if _, err := applyManagedOptionPatch(cfg, map[string]string{"max-download-limit": "1.5"}); err == nil {
+		t.Fatal("expected decimal byte value error")
+	}
+}
+
 func TestWriteConfigFileKeepsTrackerListOnSingleLine(t *testing.T) {
 	cfg := &Config{
 		Panel: PanelConfig{

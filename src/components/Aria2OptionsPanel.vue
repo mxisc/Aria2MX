@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { SlidersHorizontal } from 'lucide-vue-next'
+import { Info, SlidersHorizontal } from 'lucide-vue-next'
 import { api } from '@/api'
+import { ariaNgOptionDescriptions } from '@/data/ariaNgOptionDescriptions'
 import type { AppConfig, Aria2OptionMap } from '@/types'
 
 type OptionCategory = {
@@ -22,6 +23,7 @@ const baseline = ref<Aria2OptionMap>({})
 const loading = ref(false)
 const message = ref('')
 const errorDialog = ref('')
+const activeTooltip = ref<{ text: string; x: number; y: number } | null>(null)
 const activeCategory = ref('basic')
 const search = ref('')
 const config = ref<Pick<AppConfig, 'trackerSubscriptionEnabled' | 'trackerSubscriptionSource'>>({
@@ -31,6 +33,21 @@ const config = ref<Pick<AppConfig, 'trackerSubscriptionEnabled' | 'trackerSubscr
 
 const multilineOptionKeys = new Set(['header', 'bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
 const commaSeparatedOptionKeys = new Set(['bt-tracker', 'bt-exclude-tracker', 'no-proxy'])
+const unitOptionKeys = new Set([
+  'bt-request-peer-speed-limit',
+  'disk-cache',
+  'lowest-speed-limit',
+  'max-download-limit',
+  'max-mmap-limit',
+  'max-overall-download-limit',
+  'max-overall-upload-limit',
+  'max-upload-limit',
+  'min-split-size',
+  'no-file-allocation-limit',
+  'piece-length',
+  'rpc-max-request-size',
+  'socket-recv-buffer-size',
+])
 
 const categories: OptionCategory[] = [
   {
@@ -272,8 +289,8 @@ async function save() {
   const patch: Record<string, string> = {}
   const allKeys = new Set([...Object.keys(baseline.value), ...Object.keys(options.value)])
   for (const key of allKeys) {
-    const nextValue = options.value[key] ?? ''
-    const prevValue = baseline.value[key] ?? ''
+    const nextValue = normalizeOptionValueForSave(key, options.value[key] ?? '')
+    const prevValue = normalizeOptionValueForSave(key, baseline.value[key] ?? '')
     if (nextValue !== prevValue) patch[key] = nextValue
   }
   if (Object.keys(patch).length === 0) {
@@ -315,6 +332,23 @@ function closeErrorDialog() {
   errorDialog.value = ''
 }
 
+function showOptionTooltip(event: MouseEvent | FocusEvent, key: string) {
+  const text = optionDescription(key)
+  const target = event.currentTarget as HTMLElement | null
+  if (!text || !target) return
+  const rect = target.getBoundingClientRect()
+  const preferredX = rect.right + 8
+  activeTooltip.value = {
+    text,
+    x: Math.max(24, Math.min(preferredX, window.innerWidth - 444)),
+    y: Math.min(Math.max(rect.top + rect.height / 2, 88), window.innerHeight - 88),
+  }
+}
+
+function hideOptionTooltip() {
+  activeTooltip.value = null
+}
+
 function optionValue(key: string) {
   return options.value[key] ?? ''
 }
@@ -332,7 +366,7 @@ function optionDescription(key: string) {
   if (isOptionReadonly(key) && key === 'bt-tracker' && config.value.trackerSubscriptionEnabled) {
     return '节点订阅已开启，当前 bt-tracker 由订阅源自动维护。'
   }
-  return copy[key]?.description || '来自 aria2 全局选项。'
+  return ariaNgOptionDescriptions[key] || copy[key]?.description || ''
 }
 
 function optionControlKind(key: string) {
@@ -367,12 +401,44 @@ function normalizeOptionsForEditor(source: Aria2OptionMap) {
 }
 
 function normalizeOptionValueForEditor(key: string, value: string) {
+  if (unitOptionKeys.has(key)) return normalizeUnitOptionForEditor(value)
   if (!commaSeparatedOptionKeys.has(key)) return value ?? ''
   return (value ?? '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
     .join('\n')
+}
+
+function normalizeOptionValueForSave(key: string, value: string) {
+  if (unitOptionKeys.has(key)) return normalizeUnitOptionForSave(value)
+  return value
+}
+
+function normalizeUnitOptionForEditor(value: string) {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return ''
+  if (/^\d+$/.test(trimmed)) {
+    const bytes = Number(trimmed)
+    if (Number.isSafeInteger(bytes) && bytes > 0) {
+      if (bytes % 1073741824 === 0) return `${bytes / 1073741824}G`
+      if (bytes % 1048576 === 0) return `${bytes / 1048576}M`
+      if (bytes % 1024 === 0) return `${bytes / 1024}K`
+    }
+    return trimmed
+  }
+  return normalizeUnitOptionForSave(trimmed)
+}
+
+function normalizeUnitOptionForSave(value: string) {
+  const trimmed = (value ?? '').trim()
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([kmg]?)(?:b)?$/i)
+  if (!match) return trimmed
+  const unit = match[2].toUpperCase()
+  if (!unit) return match[1]
+  if (!match[1].includes('.')) return `${match[1]}${unit}`
+  const multiplier = unit === 'G' ? 1073741824 : unit === 'M' ? 1048576 : 1024
+  return String(Math.round(Number(match[1]) * multiplier))
 }
 </script>
 
@@ -410,8 +476,21 @@ function normalizeOptionValueForEditor(key: string, value: string) {
             :class="{ multiline: optionControlKind(key) === 'textarea', readonly: isOptionReadonly(key) }"
           >
             <div class="option-main">
-              <b>{{ optionTitle(key) }}</b>
-              <small v-if="optionDescription(key)">{{ optionDescription(key) }}</small>
+              <div class="option-title-line">
+                <b>{{ optionTitle(key) }}</b>
+                <button
+                  v-if="optionDescription(key)"
+                  class="option-help"
+                  type="button"
+                  :aria-label="`${optionTitle(key)}说明`"
+                  @mouseenter="showOptionTooltip($event, key)"
+                  @mouseleave="hideOptionTooltip"
+                  @focus="showOptionTooltip($event, key)"
+                  @blur="hideOptionTooltip"
+                >
+                  <Info :size="14" />
+                </button>
+              </div>
               <code>{{ key }}</code>
             </div>
             <div class="option-meta">
@@ -465,6 +544,16 @@ function normalizeOptionValueForEditor(key: string, value: string) {
       {{ message }}
     </p>
   </section>
+  <Teleport to="body">
+    <div
+      v-if="activeTooltip"
+      class="option-help-floating"
+      role="tooltip"
+      :style="{ left: `${activeTooltip.x}px`, top: `${activeTooltip.y}px` }"
+    >
+      {{ activeTooltip.text }}
+    </div>
+  </Teleport>
   <Teleport to="body">
     <div v-if="errorDialog" class="center-dialog-backdrop" @click="closeErrorDialog">
       <div class="center-dialog" role="alertdialog" aria-modal="true" aria-label="错误提示" @click.stop>

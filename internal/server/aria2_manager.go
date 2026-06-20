@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -74,6 +76,24 @@ var managedCommaSeparatedOptionKeys = map[string]struct{}{
 	"bt-exclude-tracker": {},
 	"no-proxy":           {},
 }
+
+var managedUnitOptionKeys = map[string]struct{}{
+	"bt-request-peer-speed-limit": {},
+	"disk-cache":                  {},
+	"lowest-speed-limit":          {},
+	"max-download-limit":          {},
+	"max-mmap-limit":              {},
+	"max-overall-download-limit":  {},
+	"max-overall-upload-limit":    {},
+	"max-upload-limit":            {},
+	"min-split-size":              {},
+	"no-file-allocation-limit":    {},
+	"piece-length":                {},
+	"rpc-max-request-size":        {},
+	"socket-recv-buffer-size":     {},
+}
+
+var managedUnitOptionPattern = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)\s*([kmg]?)(?:b)?$`)
 
 var managedCACertificateCandidates = []string{
 	"/etc/ssl/certs/ca-certificates.crt",
@@ -281,7 +301,10 @@ func applyManagedOptionPatch(cfg *Config, patch map[string]string) (map[string]s
 	}
 	sanitizedPatch := make(map[string]string, len(patch))
 	for key, value := range patch {
-		normalized := normalizeManagedOptionValue(key, value)
+		normalized, err := normalizeManagedOptionValueStrict(key, value)
+		if err != nil {
+			return nil, err
+		}
 		trimmed := strings.TrimSpace(normalized)
 		switch key {
 		case "rpc-listen-port":
@@ -309,15 +332,60 @@ func applyManagedOptionPatch(cfg *Config, patch map[string]string) (map[string]s
 }
 
 func normalizeManagedOptionValue(key, value string) string {
+	normalized, err := normalizeManagedOptionValueStrict(key, value)
+	if err != nil {
+		return strings.TrimSpace(value)
+	}
+	return normalized
+}
+
+func normalizeManagedOptionValueStrict(key, value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
-		return ""
+		return "", nil
 	}
 	if _, ok := managedCommaSeparatedOptionKeys[key]; ok {
 		parts := splitManagedOptionList(trimmed)
-		return strings.Join(parts, ",")
+		return strings.Join(parts, ","), nil
 	}
-	return value
+	if _, ok := managedUnitOptionKeys[key]; ok {
+		return normalizeManagedUnitOptionValue(key, trimmed)
+	}
+	return value, nil
+}
+
+func normalizeManagedUnitOptionValue(key, value string) (string, error) {
+	match := managedUnitOptionPattern.FindStringSubmatch(value)
+	if match == nil {
+		return "", fmt.Errorf("%s 的单位无效，请使用数字或 K/M/G，例如 512K、10M、1G。", key)
+	}
+	numberText := match[1]
+	unit := strings.ToUpper(match[2])
+	if unit == "" {
+		if strings.Contains(numberText, ".") {
+			return "", fmt.Errorf("%s 的值无效，无单位时请使用整数。", key)
+		}
+		return numberText, nil
+	}
+	if !strings.Contains(numberText, ".") {
+		return numberText + unit, nil
+	}
+	number, err := strconv.ParseFloat(numberText, 64)
+	if err != nil || number < 0 {
+		return "", fmt.Errorf("%s 的值无效，请使用数字或 K/M/G，例如 512K、10M、1G。", key)
+	}
+	multiplier := float64(1024)
+	switch unit {
+	case "M":
+		multiplier = 1024 * 1024
+	case "G":
+		multiplier = 1024 * 1024 * 1024
+	}
+	bytes := math.Round(number * multiplier)
+	if bytes > float64(math.MaxInt64) {
+		return "", fmt.Errorf("%s 的值过大。", key)
+	}
+	return strconv.FormatInt(int64(bytes), 10), nil
 }
 
 func splitManagedOptionList(value string) []string {

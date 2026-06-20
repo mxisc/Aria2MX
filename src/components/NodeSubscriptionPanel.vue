@@ -88,7 +88,7 @@ async function save() {
         </label>
       </div>
       <p class="hint">
-        开启后，面板会拉取所选订阅源并覆盖当前的 <code>bt-tracker</code>。关闭后只停止自动同步，不会自动清空已写入的 tracker。
+        开启后，保存时会立即拉取订阅源，之后每 24 小时自动同步一次。
       </p>
       <div v-if="selectedEntry" class="node-subscription-list">
         <article class="node-subscription-card">
