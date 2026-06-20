@@ -76,6 +76,7 @@ export type PeerBanRecord = {
   ip: string
   reason?: string
   createdAt?: string
+  expiresAt?: string
 }
 
 export type SuspiciousPeer = {

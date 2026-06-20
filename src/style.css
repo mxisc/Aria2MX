@@ -2305,7 +2305,7 @@ button:disabled {
 
 .peer-guard-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -2373,11 +2373,11 @@ button:disabled {
 }
 
 .peer-guard-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) 100px 100px 76px minmax(0, 1.2fr) 88px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) 100px 100px 76px 88px;
 }
 
 .peer-guard-blocked-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 180px 88px;
+  grid-template-columns: minmax(0, 1fr) 180px 88px;
 }
 
 .peer-guard-grid > span,

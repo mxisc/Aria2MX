@@ -41,7 +41,7 @@ const pageMeta = {
   subscriptions: { title: '节点订阅', subtitle: '选择内置订阅源并写入 aria2 的 bt-tracker。', badge: '节点订阅' },
   options: { title: 'Aria2', subtitle: '按分类维护 aria2 全局参数。', badge: 'Aria2' },
   scripts: { title: '脚本设置', subtitle: '编辑任务完成后自动执行的脚本。', badge: '脚本设置' },
-  peerGuard: { title: '节点防护', subtitle: '识别高风险 Peer 并通过系统防火墙封禁。', badge: '节点防护' },
+  peerGuard: { title: '节点防护', subtitle: '封禁只从本机获取数据而不回传的吸血节点；', badge: '节点防护' },
   connection: { title: '连接信息', subtitle: '查看当前面板代理、内置 RPC、MCP 和版本信息。', badge: '连接信息' },
   mcp: { title: 'MCP', subtitle: '查看 MCP 可用工具。', badge: 'MCP' },
   settings: { title: '面板设置', subtitle: '维护 RPC、刷新间隔和面板登录配置。', badge: '面板设置' },

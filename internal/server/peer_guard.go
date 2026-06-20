@@ -20,6 +20,8 @@ const (
 	peerGuardNFTTableName  = "ariamx_peer_guard"
 	peerGuardIPTChainName  = "ARIAMX_PEER_GUARD"
 	peerGuardAutoBanPeriod = 30 * time.Second
+	peerGuardBanDuration   = 30 * time.Minute
+	peerGuardAutoBanReason = "持续从本机获取数据却不回传"
 	defaultAutoBanMinScore = 3
 )
 
@@ -81,6 +83,7 @@ func (s *Server) startPeerGuardLoop() {
 		for {
 			select {
 			case <-ticker.C:
+				s.pruneExpiredPeerBans()
 				s.runPeerGuardAutoBanSweep()
 			case <-s.peerGuardStop:
 				return
@@ -181,6 +184,7 @@ func (s *Server) handlePeerGuardUnban(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) peerGuardSnapshot() (peerGuardSnapshot, error) {
+	s.pruneExpiredPeerBans()
 	s.cfgMu.RLock()
 	blocked := append([]PeerBanRecord(nil), s.cfg.PeerGuard.BlockedPeers...)
 	autoBanEnabled := s.cfg.PeerGuard.AutoBanEnabled
@@ -247,10 +251,11 @@ func (s *Server) banPeer(ip, reason string) (peerGuardSnapshot, error) {
 			return s.peerGuardSnapshot()
 		}
 	}
+	now := time.Now()
 	next := append(current, PeerBanRecord{
 		IP:        ip,
 		Reason:    reason,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: formatPeerGuardTime(now),
 	})
 	if err := s.updatePeerGuardPeers(next); err != nil {
 		return peerGuardSnapshot{}, err
@@ -348,10 +353,12 @@ func (s *Server) runPeerGuardAutoBanSweep() {
 		if _, ok := blockedSet[peer.IP]; ok {
 			continue
 		}
+		now := time.Now()
 		next = append(next, PeerBanRecord{
 			IP:        peer.IP,
 			Reason:    fmt.Sprintf("自动封禁：评分 %d 分，%s", peer.Score, peer.Reason),
-			CreatedAt: time.Now().Format(time.RFC3339),
+			CreatedAt: formatPeerGuardTime(now),
+			ExpiresAt: formatPeerGuardTime(peerGuardBanExpiresAt(now)),
 		})
 		blockedSet[peer.IP] = struct{}{}
 	}
@@ -359,6 +366,29 @@ func (s *Server) runPeerGuardAutoBanSweep() {
 		return
 	}
 	_ = s.updatePeerGuardPeers(next)
+}
+
+func (s *Server) pruneExpiredPeerBans() {
+	now := time.Now()
+	s.cfgMu.RLock()
+	current := append([]PeerBanRecord(nil), s.cfg.PeerGuard.BlockedPeers...)
+	s.cfgMu.RUnlock()
+	if len(current) == 0 {
+		return
+	}
+	next := make([]PeerBanRecord, 0, len(current))
+	for _, record := range current {
+		if peerBanExpired(record, now) {
+			continue
+		}
+		next = append(next, record)
+	}
+	if len(next) == len(current) {
+		return
+	}
+	if err := s.updatePeerGuardPeers(next); err != nil {
+		s.setPeerGuardStatus(err.Error(), time.Time{})
+	}
 }
 
 func (s *Server) applyPeerGuardFirewall(previous, peers []PeerBanRecord) error {
@@ -941,22 +971,14 @@ func suspiciousPeerFromMap(gid, taskName string, peer map[string]interface{}, bl
 	seeder := peerFlag(peer["seeder"])
 	peerChoking := peerFlag(peer["peerChoking"])
 
-	download := parseAria2Int64(downloadSpeed)
-	upload := parseAria2Int64(uploadSpeed)
+	peerDownload := parseAria2Int64(downloadSpeed)
+	peerUpload := parseAria2Int64(uploadSpeed)
 
 	score := 0
-	reasons := make([]string, 0, 3)
-	if upload >= 64*1024 && download <= 4*1024 {
-		score += 2
-		reasons = append(reasons, "持续只从本机获取数据")
-	}
-	if upload >= 32*1024 && upload >= download*4 {
-		score++
-		reasons = append(reasons, "上传远高于回传")
-	}
-	if !seeder && peerChoking && upload >= 16*1024 && download == 0 {
-		score++
-		reasons = append(reasons, "当前没有有效回传")
+	reason := ""
+	if !seeder && peerChoking && peerDownload >= 64*1024 && peerUpload <= 4*1024 {
+		score = defaultAutoBanMinScore
+		reason = peerGuardAutoBanReason
 	}
 	if score < 2 || ip == "" {
 		return suspiciousPeerSnapshot{}, false
@@ -972,7 +994,7 @@ func suspiciousPeerFromMap(gid, taskName string, peer map[string]interface{}, bl
 		Seeder:        seeder,
 		Blocked:       blocked,
 		Score:         score,
-		Reason:        strings.Join(reasons, "；"),
+		Reason:        reason,
 	}, true
 }
 
@@ -1033,6 +1055,18 @@ func formatPeerGuardTime(value time.Time) string {
 		return ""
 	}
 	return value.Format(time.RFC3339)
+}
+
+func peerGuardBanExpiresAt(createdAt time.Time) time.Time {
+	return createdAt.Add(peerGuardBanDuration)
+}
+
+func peerBanExpired(record PeerBanRecord, now time.Time) bool {
+	expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(record.ExpiresAt))
+	if err != nil || expiresAt.IsZero() {
+		return false
+	}
+	return !expiresAt.After(now)
 }
 
 func (s *Server) marshalPeerGuardSnapshot() ([]byte, error) {

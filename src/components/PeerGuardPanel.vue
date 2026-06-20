@@ -8,7 +8,6 @@ import { speed } from '@/utils/format'
 const loading = ref(false)
 const message = ref('')
 const manualIP = ref('')
-const manualReason = ref('')
 const data = ref<PeerGuardSnapshot>({
   firewallMode: 'pf',
   firewallReady: true,
@@ -42,7 +41,6 @@ async function ban(ip: string, reason: string) {
   try {
     data.value = await api.banPeer(ip, reason)
     manualIP.value = ''
-    manualReason.value = ''
     message.value = '节点已封禁。'
   } catch (error) {
     message.value = error instanceof Error ? error.message : '节点封禁失败。'
@@ -69,7 +67,7 @@ async function banManual() {
     message.value = '请先输入节点 IP。'
     return
   }
-  await ban(manualIP.value.trim(), manualReason.value.trim())
+  await ban(manualIP.value.trim(), '')
 }
 
 async function updateAutoBan(enabled: boolean) {
@@ -83,6 +81,17 @@ async function updateAutoBan(enabled: boolean) {
   } finally {
     loading.value = false
   }
+}
+
+function syncOverflowTitle(event: MouseEvent | FocusEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  const text = target.dataset.fullTitle || ''
+  target.title = text && target.scrollWidth > target.clientWidth ? text : ''
+}
+
+function banExpiresText(value?: string) {
+  return value || '永久'
 }
 </script>
 
@@ -154,10 +163,6 @@ async function updateAutoBan(enabled: boolean) {
           <span>手动封禁 IP</span>
           <input v-model="manualIP" :disabled="loading || actionLocked" placeholder="例如 203.0.113.10">
         </label>
-        <label>
-          <span>原因</span>
-          <input v-model="manualReason" :disabled="loading || actionLocked" placeholder="可选">
-        </label>
         <div class="peer-guard-action-row">
           <button class="primary" :disabled="loading || actionLocked" @click="banManual">
             封禁节点
@@ -175,15 +180,14 @@ async function updateAutoBan(enabled: boolean) {
           </div>
           <div class="data-table peer-guard-table">
             <div class="table-row head peer-guard-grid">
-              <span>任务</span><span>节点</span><span>下载</span><span>上传</span><span>评分</span><span>原因</span><span>操作</span>
+              <span>任务</span><span>节点</span><span>下载</span><span>上传</span><span>评分</span><span>操作</span>
             </div>
             <div v-for="peer in suspiciousPeers" :key="`${peer.gid}-${peer.ip}-${peer.port}`" class="table-row peer-guard-grid">
-              <span>{{ peer.taskName }}</span>
-              <span>{{ peer.ip }}:{{ peer.port }}</span>
-              <span>{{ speed(peer.downloadSpeed) }}</span>
-              <span>{{ speed(peer.uploadSpeed) }}</span>
-              <span>{{ peer.score }} 分</span>
-              <span>{{ peer.reason }}</span>
+              <span :data-full-title="peer.taskName" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ peer.taskName }}</span>
+              <span :data-full-title="`${peer.ip}:${peer.port}`" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ peer.ip }}:{{ peer.port }}</span>
+              <span :data-full-title="speed(peer.downloadSpeed)" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ speed(peer.downloadSpeed) }}</span>
+              <span :data-full-title="speed(peer.uploadSpeed)" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ speed(peer.uploadSpeed) }}</span>
+              <span :data-full-title="`${peer.score} 分`" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ peer.score }} 分</span>
               <span>
                 <button v-if="!peer.blocked" class="ghost" :disabled="loading || actionLocked" @click="ban(peer.ip, peer.reason)">
                   封禁
@@ -203,12 +207,11 @@ async function updateAutoBan(enabled: boolean) {
           </div>
           <div class="data-table peer-guard-table">
             <div class="table-row head peer-guard-blocked-grid">
-              <span>IP</span><span>原因</span><span>时间</span><span>操作</span>
+              <span>IP</span><span>有效期</span><span>操作</span>
             </div>
             <div v-for="peer in data.blockedPeers" :key="peer.ip" class="table-row peer-guard-blocked-grid">
-              <span>{{ peer.ip }}</span>
-              <span>{{ peer.reason || '-' }}</span>
-              <span>{{ peer.createdAt || '-' }}</span>
+              <span :data-full-title="peer.ip" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ peer.ip }}</span>
+              <span :data-full-title="banExpiresText(peer.expiresAt)" @mouseenter="syncOverflowTitle" @focus="syncOverflowTitle">{{ banExpiresText(peer.expiresAt) }}</span>
               <span>
                 <button class="ghost" :disabled="loading || actionLocked" @click="unban(peer.ip)">
                   解除

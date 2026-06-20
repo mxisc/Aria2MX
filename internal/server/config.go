@@ -64,6 +64,7 @@ type PeerBanRecord struct {
 	IP        string `json:"ip"`
 	Reason    string `json:"reason,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
 const defaultManagedRPCPort = 16800
@@ -357,6 +358,7 @@ func normalizePeerBanRecords(records []PeerBanRecord) []PeerBanRecord {
 		record.IP = strings.TrimSpace(record.IP)
 		record.Reason = strings.TrimSpace(record.Reason)
 		record.CreatedAt = strings.TrimSpace(record.CreatedAt)
+		record.ExpiresAt = strings.TrimSpace(record.ExpiresAt)
 		if record.IP == "" {
 			continue
 		}
