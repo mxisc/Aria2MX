@@ -20,90 +20,6 @@ let syncingEditor = false
 
 const activeHook = computed(() => hooks.value.find((hook) => hook.key === activeKey.value) || hooks.value[0])
 
-const safeTemplate = `#!/usr/bin/env bash
-set -euo pipefail
-
-GID="$1"
-TARGET_USER="www"
-TARGET_GROUP="www"
-DOWNLOAD_ROOT="/data/downloads"
-CONFIG_PATH="\${ARIAMX_CONFIG_PATH:?missing ARIAMX_CONFIG_PATH}"
-
-python3 - "$GID" "$TARGET_USER" "$TARGET_GROUP" "$DOWNLOAD_ROOT" "$CONFIG_PATH" <<'PY'
-import json
-import os
-import pwd
-import grp
-import sys
-import urllib.request
-
-gid, target_user, target_group, download_root, config_path = sys.argv[1:6]
-root = os.path.realpath(download_root)
-uid = pwd.getpwnam(target_user).pw_uid
-group_id = grp.getgrnam(target_group).gr_gid
-
-with open(config_path, "r", encoding="utf-8") as file:
-    cfg = json.load(file)
-
-aria2 = cfg["aria2"]
-rpc_url = aria2["rpcUrl"]
-rpc_secret = aria2["rpcSecret"]
-
-def rpc(method, params):
-    payload = json.dumps({
-        "jsonrpc": "2.0",
-        "id": "hook",
-        "method": method,
-        "params": [f"token:{rpc_secret}", *params],
-    }).encode("utf-8")
-    req = urllib.request.Request(rpc_url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        result = json.loads(resp.read())
-    if "error" in result:
-        raise RuntimeError(result["error"])
-    return result["result"]
-
-status = rpc("aria2.tellStatus", [gid, ["gid", "files", "bittorrent"]])
-is_bt = bool(status.get("bittorrent"))
-paths = []
-
-for item in status.get("files", []):
-    path = item.get("path") or ""
-    if not path:
-        continue
-    real = os.path.realpath(path)
-    if real == root or not real.startswith(root + os.sep):
-        raise RuntimeError(f"refuse unsafe path outside {root}: {real}")
-    paths.append(real)
-
-directories = set()
-for path in paths:
-    if os.path.exists(path):
-        os.chown(path, uid, group_id)
-        os.chmod(path, 0o640)
-    sidecar = path + ".aria2"
-    if os.path.exists(sidecar):
-        os.remove(sidecar)
-    parent = os.path.dirname(path)
-    while parent.startswith(root + os.sep):
-        directories.add(parent)
-        parent = os.path.dirname(parent)
-
-for directory in sorted(directories, key=len, reverse=True):
-    if os.path.isdir(directory):
-        os.chown(directory, uid, group_id)
-        os.chmod(directory, 0o750)
-
-if is_bt:
-    try:
-        rpc("aria2.remove", [gid])
-    except Exception:
-        pass
-
-print(f"hook finished: gid={gid} files={len(paths)} bt={is_bt}")
-PY
-`
-
 onMounted(load)
 onBeforeUnmount(() => {
   editorView?.destroy()
@@ -155,10 +71,6 @@ async function save() {
   }
 }
 
-function useTemplate() {
-  updateActiveHook({ content: safeTemplate })
-}
-
 function updateActiveHook(patch: Partial<ScriptHookItem>) {
   const key = activeHook.value?.key
   if (!key) return
@@ -206,9 +118,6 @@ function syncEditorDocument() {
         <span>任务脚本</span>
       </div>
       <div class="button-row">
-        <button class="ghost" :disabled="loading" @click="useTemplate">
-          使用安全模板
-        </button>
         <button class="ghost" :disabled="loading" @click="load">
           刷新
         </button>
