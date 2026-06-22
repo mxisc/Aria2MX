@@ -809,6 +809,42 @@ button:disabled {
   box-shadow: none;
 }
 
+[data-skin='custom'] button,
+[data-skin='custom'] .upload-button {
+  background: color-mix(in srgb, var(--control-bg) 18%, transparent);
+  border-color: color-mix(in srgb, var(--soft-line) 28%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-clip: padding-box;
+  box-shadow: none;
+}
+
+[data-skin='custom'] button:hover,
+[data-skin='custom'] .upload-button:hover {
+  background: color-mix(in srgb, var(--control-hover) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--soft-line));
+}
+
+[data-skin='custom'] button.primary,
+[data-skin='custom'] .upload-button.primary {
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 68%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 82%, var(--soft-line));
+}
+
+[data-skin='custom'] button.primary:hover,
+[data-skin='custom'] .upload-button.primary:hover {
+  background: color-mix(in srgb, var(--accent-strong) 74%, transparent);
+  border-color: color-mix(in srgb, var(--accent-strong) 88%, var(--soft-line));
+}
+
+[data-skin='custom'] .segmented button.active,
+[data-skin='custom'] .task-actions button:hover {
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 62%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 82%, var(--soft-line));
+}
+
 [data-skin='custom'] input:not([type='checkbox']):not([type='radio']):not([type='file'])::placeholder,
 [data-skin='custom'] textarea::placeholder {
   color: color-mix(in srgb, var(--muted) 88%, transparent);

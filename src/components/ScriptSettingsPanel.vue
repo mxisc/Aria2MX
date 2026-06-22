@@ -7,6 +7,7 @@ import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { api } from '@/api'
+import { currentSkinEnabled } from '@/theme'
 import type { ScriptHookItem } from '@/types'
 
 const hooks = ref<ScriptHookItem[]>([])
@@ -19,6 +20,22 @@ let editorView: EditorView | undefined
 let syncingEditor = false
 
 const activeHook = computed(() => hooks.value.find((hook) => hook.key === activeKey.value) || hooks.value[0])
+const skinStyle = computed(() => {
+  if (!currentSkinEnabled.value) return {}
+  return {
+    '--script-tab-bg': 'color-mix(in srgb, var(--panel) 18%, transparent)',
+    '--script-tab-border': 'color-mix(in srgb, var(--soft-line) 28%, transparent)',
+    '--script-tab-text': 'var(--text)',
+    '--script-tab-active-bg': 'color-mix(in srgb, var(--accent) 62%, transparent)',
+    '--script-tab-active-border': 'color-mix(in srgb, var(--accent) 82%, var(--soft-line))',
+    '--script-tab-active-text': '#fff',
+    '--script-editor-bg': 'color-mix(in srgb, var(--field-bg) 18%, transparent)',
+    '--script-editor-border': 'color-mix(in srgb, var(--soft-line) 28%, transparent)',
+    '--script-editor-gutter-bg': 'color-mix(in srgb, var(--panel) 16%, transparent)',
+    '--script-editor-gutter-border': 'color-mix(in srgb, var(--soft-line) 24%, transparent)',
+    '--script-editor-active-line-bg': 'color-mix(in srgb, var(--accent) 12%, transparent)',
+  }
+})
 
 onMounted(load)
 onBeforeUnmount(() => {
@@ -111,7 +128,7 @@ function syncEditorDocument() {
 </script>
 
 <template>
-  <section class="panel script-settings-panel">
+  <section class="panel script-settings-panel" :style="skinStyle">
     <div class="script-head">
       <div class="section-title">
         <FileCode2 :size="17" />
@@ -178,18 +195,18 @@ function syncEditorDocument() {
 }
 
 .script-tabs button {
-  background: var(--panel-muted);
-  border: 1px solid var(--line);
+  background: var(--script-tab-bg, var(--panel-muted));
+  border: 1px solid var(--script-tab-border, var(--line));
   border-radius: 8px;
-  color: var(--muted);
+  color: var(--script-tab-text, var(--muted));
   min-height: 40px;
   padding: 0 12px;
 }
 
 .script-tabs button.active {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-  color: var(--accent-text);
+  background: var(--script-tab-active-bg, var(--accent-soft));
+  border-color: var(--script-tab-active-border, color-mix(in srgb, var(--accent) 35%, var(--line)));
+  color: var(--script-tab-active-text, var(--accent-text));
 }
 
 .script-editor {
@@ -207,8 +224,8 @@ function syncEditorDocument() {
 }
 
 .script-editor :deep(.cm-editor) {
-  background: var(--field-bg);
-  border: 1px solid var(--line);
+  background: var(--script-editor-bg, var(--field-bg));
+  border: 1px solid var(--script-editor-border, var(--line));
   border-radius: 8px;
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -227,14 +244,14 @@ function syncEditorDocument() {
 }
 
 .script-editor :deep(.cm-gutters) {
-  background: var(--panel-muted);
-  border-color: var(--line);
+  background: var(--script-editor-gutter-bg, var(--panel-muted));
+  border-color: var(--script-editor-gutter-border, var(--line));
   color: var(--muted);
 }
 
 .script-editor :deep(.cm-activeLine),
 .script-editor :deep(.cm-activeLineGutter) {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  background: var(--script-editor-active-line-bg, color-mix(in srgb, var(--accent) 9%, transparent));
 }
 
 .script-editor :deep(.cm-content) {
