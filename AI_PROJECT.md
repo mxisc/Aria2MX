@@ -87,3 +87,4 @@
 - 症状：GitLab CI 在 `pnpm install --frozen-lockfile` 前失败，日志显示最新版 pnpm 要求 Node.js `>=22.13`，但 `golang:1.23-bookworm` 通过 apt 安装的是 Node.js 18。原因：CI 使用 `npm install -g pnpm` 拉取浮动最新版，pnpm 的 engine 要求变化后和系统 Node 不兼容。预防：CI 固定安装与当前 Node/lockfile 兼容的 pnpm 版本，例如 `pnpm@10.14.0`，不要在构建脚本里依赖全局 latest。
 - 症状：项目按全新发布从 AriaMX 改成 Aria2MX 时，如果还保留旧环境变量、旧 RPC Header 或旧命令名，会让新发布语义变成隐性兼容。原因：品牌名、二进制名、配置名和运行入口混在同一批字符串里，容易顺手留下旧入口。预防：全新发布改名时只保留新 `ARIA2MX_*` 环境变量、`X-Aria2MX-Secret` Header、`aria2mx` 命令和 `aria2mx-data` 运行目录；旧本地文件最多作为忽略项防止误提交，不参与运行逻辑。
 - 症状：推送测试 tag 后 GitLab 只出现 pipeline artifacts，Releases 页面看不到发布。原因：CI 只有 build job 和 artifacts，没有 release stage 创建 GitLab Release 对象。预防：tag pipeline 需要单独的 release job，使用 `release-cli` 在构建矩阵完成后创建 Release，并把各平台 artifact 下载链接挂到 release assets。
+- 症状：GitLab Release assets 指向 job artifacts 时，下载链接会随 artifacts 过期而失效。原因：artifacts 是 CI 临时产物，不适合当长期发布包。预防：tag pipeline 应先把构建出的各平台二进制上传到 Generic Package Registry，再让 Release assets 指向 package registry URL。

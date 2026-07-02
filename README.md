@@ -68,7 +68,7 @@ pnpm run prepare:aria2:all
 
 CI 会固定安装 `pnpm@10.14.0`，避免 Debian Bookworm 默认 Node.js 18 环境被最新版 pnpm 的 Node 版本要求卡住。
 
-推送 tag 时，CI 会在矩阵构建成功后创建 GitLab Release，并把三个平台的 artifact 下载链接挂到 Release assets。当前 artifact 保留 7 天，适合测试发布。
+推送 tag 时，CI 会在矩阵构建成功后把三个平台的二进制上传到 GitLab Generic Package Registry，然后创建 GitLab Release，并把永久 package 下载链接挂到 Release assets。
 
 ## 运行
 
