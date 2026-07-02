@@ -20,4 +20,4 @@ jobs:
           git clone --mirror https://gitlab.com/mxisc/aria2mx.git repo.git
           cd repo.git
           git remote set-url --push origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push --mirror
+          git push --prune origin "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
