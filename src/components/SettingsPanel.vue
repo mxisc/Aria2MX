@@ -73,7 +73,7 @@ async function save() {
       defaultDownloadDir: defaultDownloadDir.value,
       mcpEnabled: mcpEnabled.value,
       rpcOriginCheckMode: rpcOriginCheckMode.value,
-      theme: 'ariamx',
+      theme: 'aria2mx',
       colorMode: colorMode.value,
       skinEnabled: skinEnabled.value,
       skinName: skinName.value,

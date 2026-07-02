@@ -11,7 +11,7 @@ import (
 
 func TestRemoveTaskDeletesUnfinishedFiles(t *testing.T) {
 	root := t.TempDir()
-	downloadDir := filepath.Join(root, "ariamx-data", "aria2", "downloads")
+	downloadDir := filepath.Join(root, "aria2mx-data", "aria2", "downloads")
 	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
 		t.Fatalf("mkdir download dir: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestRemoveTaskDeletesUnfinishedFiles(t *testing.T) {
 		case "aria2.tellStatus":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"gid":    "gid-1",
 					"status": "active",
@@ -45,7 +45,7 @@ func TestRemoveTaskDeletesUnfinishedFiles(t *testing.T) {
 		case "aria2.forceRemove":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "gid-1",
 			})
 		default:
@@ -86,7 +86,7 @@ func TestRemoveTaskDeletesUnfinishedFiles(t *testing.T) {
 
 func TestRemoveTaskKeepsCompletedFilesInPlace(t *testing.T) {
 	root := t.TempDir()
-	downloadDir := filepath.Join(root, "ariamx-data", "aria2", "downloads")
+	downloadDir := filepath.Join(root, "aria2mx-data", "aria2", "downloads")
 	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
 		t.Fatalf("mkdir download dir: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestRemoveTaskKeepsCompletedFilesInPlace(t *testing.T) {
 		case "aria2.tellStatus":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"gid":    "gid-2",
 					"status": "complete",
@@ -116,7 +116,7 @@ func TestRemoveTaskKeepsCompletedFilesInPlace(t *testing.T) {
 		case "aria2.removeDownloadResult":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "OK",
 			})
 		default:
@@ -149,7 +149,7 @@ func TestRemoveTaskKeepsCompletedFilesInPlace(t *testing.T) {
 
 func TestDeleteTaskPathRejectsDirectory(t *testing.T) {
 	root := t.TempDir()
-	downloadDir := filepath.Join(root, "ariamx-data", "aria2", "downloads")
+	downloadDir := filepath.Join(root, "aria2mx-data", "aria2", "downloads")
 	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
 		t.Fatalf("mkdir download dir: %v", err)
 	}

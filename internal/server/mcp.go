@@ -10,22 +10,22 @@ import (
 	"strconv"
 	"strings"
 
-	"ariamx/internal/version"
+	"aria2mx/internal/version"
 )
 
 const (
 	mcpProtocolVersion        = "2024-11-05"
 	mcpDefaultPageSize        = 50
-	mcpResourceConnectionInfo = "ariamx://connection/info"
-	mcpResourcePanelConfig    = "ariamx://config/panel"
-	mcpResourceGlobalOption   = "ariamx://config/aria2/global-options"
-	mcpResourceGlobalStat     = "ariamx://stats/global"
-	mcpResourceTasksActive    = "ariamx://tasks/active"
-	mcpResourceTasksWaiting   = "ariamx://tasks/waiting"
-	mcpResourceTasksStopped   = "ariamx://tasks/stopped"
-	mcpTaskTemplate           = "ariamx://task/{gid}"
-	mcpTaskBucketTemplate     = "ariamx://tasks/{bucket}"
-	mcpOptionTemplate         = "ariamx://option/{key}"
+	mcpResourceConnectionInfo = "aria2mx://connection/info"
+	mcpResourcePanelConfig    = "aria2mx://config/panel"
+	mcpResourceGlobalOption   = "aria2mx://config/aria2/global-options"
+	mcpResourceGlobalStat     = "aria2mx://stats/global"
+	mcpResourceTasksActive    = "aria2mx://tasks/active"
+	mcpResourceTasksWaiting   = "aria2mx://tasks/waiting"
+	mcpResourceTasksStopped   = "aria2mx://tasks/stopped"
+	mcpTaskTemplate           = "aria2mx://task/{gid}"
+	mcpTaskBucketTemplate     = "aria2mx://tasks/{bucket}"
+	mcpOptionTemplate         = "aria2mx://option/{key}"
 )
 
 var mcpTaskFields = []string{
@@ -182,7 +182,7 @@ func (s *Server) executeMCP(req mcpRequest) (mcpResponse, bool) {
 				"completions": map[string]interface{}{},
 			},
 			"serverInfo": map[string]interface{}{
-				"name":    "AriaMX MCP",
+				"name":    "Aria2MX MCP",
 				"version": version.PanelVersion,
 			},
 		}
@@ -503,8 +503,8 @@ func (s *Server) readMCPResource(uri string) ([]mcpResourceContent, error) {
 		return mcpJSONContents(uri, payload)
 	}
 
-	if strings.HasPrefix(uri, "ariamx://task/") {
-		gid := strings.TrimSpace(strings.TrimPrefix(uri, "ariamx://task/"))
+	if strings.HasPrefix(uri, "aria2mx://task/") {
+		gid := strings.TrimSpace(strings.TrimPrefix(uri, "aria2mx://task/"))
 		if gid == "" {
 			return nil, errors.New("请提供任务 GID。")
 		}
@@ -515,8 +515,8 @@ func (s *Server) readMCPResource(uri string) ([]mcpResourceContent, error) {
 		return mcpJSONContents(uri, payload)
 	}
 
-	if strings.HasPrefix(uri, "ariamx://tasks/") {
-		bucket := strings.TrimSpace(strings.TrimPrefix(uri, "ariamx://tasks/"))
+	if strings.HasPrefix(uri, "aria2mx://tasks/") {
+		bucket := strings.TrimSpace(strings.TrimPrefix(uri, "aria2mx://tasks/"))
 		payload, err := s.mcpTaskBucketResource(bucket)
 		if err != nil {
 			return nil, err
@@ -524,8 +524,8 @@ func (s *Server) readMCPResource(uri string) ([]mcpResourceContent, error) {
 		return mcpJSONContents(uri, payload)
 	}
 
-	if strings.HasPrefix(uri, "ariamx://option/") {
-		key := strings.TrimSpace(strings.TrimPrefix(uri, "ariamx://option/"))
+	if strings.HasPrefix(uri, "aria2mx://option/") {
+		key := strings.TrimSpace(strings.TrimPrefix(uri, "aria2mx://option/"))
 		if key == "" {
 			return nil, errors.New("请提供 aria2 配置项名称。")
 		}
@@ -541,12 +541,12 @@ func (s *Server) readMCPResource(uri string) ([]mcpResourceContent, error) {
 
 func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[string]interface{}, string, error) {
 	switch name {
-	case "ariamx_diagnose_task_failure":
+	case "aria2mx_diagnose_task_failure":
 		gid := strings.TrimSpace(arguments["gid"])
 		if gid == "" {
 			return nil, "", errors.New("请提供失败任务的 GID。")
 		}
-		resource, err := s.mcpEmbeddedResource("ariamx://task/" + gid)
+		resource, err := s.mcpEmbeddedResource("aria2mx://task/" + gid)
 		if err != nil {
 			return nil, "", err
 		}
@@ -566,7 +566,7 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 				},
 			},
 		}, "分析单个下载任务为什么失败或停止。", nil
-	case "ariamx_summarize_downloads":
+	case "aria2mx_summarize_downloads":
 		bucket := strings.TrimSpace(arguments["bucket"])
 		if bucket == "" {
 			bucket = "all"
@@ -576,7 +576,7 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 		case "all":
 			uris = []string{mcpResourceTasksActive, mcpResourceTasksWaiting, mcpResourceTasksStopped}
 		case "active", "waiting", "stopped":
-			uris = []string{"ariamx://tasks/" + bucket}
+			uris = []string{"aria2mx://tasks/" + bucket}
 		default:
 			return nil, "", errors.New("bucket 仅支持 all、active、waiting、stopped。")
 		}
@@ -603,7 +603,7 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 			})
 		}
 		return messages, "总结当前下载队列和异常任务。", nil
-	case "ariamx_explain_client_setup":
+	case "aria2mx_explain_client_setup":
 		client := strings.TrimSpace(arguments["client"])
 		if client == "" {
 			client = "ariang"
@@ -617,7 +617,7 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 				"role": "user",
 				"content": map[string]interface{}{
 					"type": "text",
-					"text": fmt.Sprintf("请基于下面的连接信息，说明如何让 %s 连接 AriaMX 面板代理的 aria2 RPC。优先使用 aria2 原生的 token 写法。", client),
+					"text": fmt.Sprintf("请基于下面的连接信息，说明如何让 %s 连接 Aria2MX 面板代理的 aria2 RPC。优先使用 aria2 原生的 token 写法。", client),
 				},
 			},
 			{
@@ -627,8 +627,8 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 					"resource": resource,
 				},
 			},
-		}, "解释不同客户端如何连接 AriaMX 的 RPC 代理。", nil
-	case "ariamx_tune_global_options":
+		}, "解释不同客户端如何连接 Aria2MX 的 RPC 代理。", nil
+	case "aria2mx_tune_global_options":
 		goal := strings.TrimSpace(arguments["goal"])
 		if goal == "" {
 			goal = "speed"
@@ -660,7 +660,7 @@ func (s *Server) getMCPPrompt(name string, arguments map[string]string) ([]map[s
 
 func (s *Server) completeMCPPromptArgument(name, argName, prefix string, context map[string]string) ([]string, error) {
 	switch name {
-	case "ariamx_diagnose_task_failure":
+	case "aria2mx_diagnose_task_failure":
 		if argName != "gid" {
 			return nil, nil
 		}
@@ -669,17 +669,17 @@ func (s *Server) completeMCPPromptArgument(name, argName, prefix string, context
 			return nil, err
 		}
 		return filterCompletionValues(gids, prefix), nil
-	case "ariamx_summarize_downloads":
+	case "aria2mx_summarize_downloads":
 		if argName != "bucket" {
 			return nil, nil
 		}
 		return filterCompletionValues([]string{"all", "active", "waiting", "stopped"}, prefix), nil
-	case "ariamx_explain_client_setup":
+	case "aria2mx_explain_client_setup":
 		if argName != "client" {
 			return nil, nil
 		}
 		return filterCompletionValues([]string{"ariang", "postman", "curl", "custom"}, prefix), nil
-	case "ariamx_tune_global_options":
+	case "aria2mx_tune_global_options":
 		if argName != "goal" {
 			return nil, nil
 		}
@@ -1058,7 +1058,7 @@ func mcpResourceTemplateList() []mcpResourceTemplate {
 func mcpPromptList() []mcpPrompt {
 	return []mcpPrompt{
 		{
-			Name:        "ariamx_diagnose_task_failure",
+			Name:        "aria2mx_diagnose_task_failure",
 			Title:       "诊断任务失败",
 			Description: "读取单个任务详情并分析它为什么失败或停止。",
 			Arguments: []mcpPromptArgument{
@@ -1070,7 +1070,7 @@ func mcpPromptList() []mcpPrompt {
 			},
 		},
 		{
-			Name:        "ariamx_summarize_downloads",
+			Name:        "aria2mx_summarize_downloads",
 			Title:       "总结下载队列",
 			Description: "总结当前下载队列，并指出优先处理项。",
 			Arguments: []mcpPromptArgument{
@@ -1081,9 +1081,9 @@ func mcpPromptList() []mcpPrompt {
 			},
 		},
 		{
-			Name:        "ariamx_explain_client_setup",
+			Name:        "aria2mx_explain_client_setup",
 			Title:       "解释客户端连接方式",
-			Description: "基于当前连接信息，说明第三方客户端如何接入 AriaMX RPC。",
+			Description: "基于当前连接信息，说明第三方客户端如何接入 Aria2MX RPC。",
 			Arguments: []mcpPromptArgument{
 				{
 					Name:        "client",
@@ -1092,7 +1092,7 @@ func mcpPromptList() []mcpPrompt {
 			},
 		},
 		{
-			Name:        "ariamx_tune_global_options",
+			Name:        "aria2mx_tune_global_options",
 			Title:       "调优 aria2 全局配置",
 			Description: "结合当前 aria2 配置给出调优建议。",
 			Arguments: []mcpPromptArgument{

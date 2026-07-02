@@ -101,7 +101,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	password := os.Getenv("ARIAMX_ADMIN_PASSWORD")
+	password := os.Getenv("ARIA2MX_ADMIN_PASSWORD")
 	if password == "" {
 		password = "admin"
 	}
@@ -111,7 +111,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	cfg := &Config{
 		Admin: AdminConfig{
-			Username:       getenvDefault("ARIAMX_ADMIN_USER", "admin"),
+			Username:       getenvDefault("ARIA2MX_ADMIN_USER", "admin"),
 			PasswordSalt:   salt,
 			PasswordHash:   HashPasswordFromRaw(password, salt),
 			PasswordScheme: passwordSchemeClientSHA256PBKDF2,
@@ -125,19 +125,19 @@ func LoadConfig(path string) (*Config, error) {
 			SessionTTLSeconds:  86400,
 			RPCOriginCheckMode: panelRPCOriginModeSameOrigin,
 			MCPEnabled:         true,
-			Theme:              "ariamx",
+			Theme:              "aria2mx",
 			ColorMode:          "system",
 			SkinName:           "default",
 		},
 	}
-	if rpcURL := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_RPC")); rpcURL != "" {
+	if rpcURL := strings.TrimSpace(os.Getenv("ARIA2MX_ARIA2_RPC")); rpcURL != "" {
 		cfg.Aria2.Managed = false
 		cfg.Aria2.RPCURL = rpcURL
 	}
-	if secret := strings.TrimSpace(os.Getenv("ARIAMX_ARIA2_SECRET")); secret != "" {
+	if secret := strings.TrimSpace(os.Getenv("ARIA2MX_ARIA2_SECRET")); secret != "" {
 		cfg.Aria2.RPCSecret = secret
 	}
-	if secret := strings.TrimSpace(os.Getenv("ARIAMX_PANEL_RPC_SECRET")); secret != "" {
+	if secret := strings.TrimSpace(os.Getenv("ARIA2MX_PANEL_RPC_SECRET")); secret != "" {
 		cfg.Panel.RPCSecret = secret
 	}
 	if cfg.Aria2.Managed {
@@ -247,8 +247,8 @@ func normalizeConfig(cfg *Config) bool {
 		cfg.Panel.ColorMode = "system"
 		mutated = true
 	}
-	if legacyTheme != "ariamx" {
-		cfg.Panel.Theme = "ariamx"
+	if legacyTheme != "aria2mx" {
+		cfg.Panel.Theme = "aria2mx"
 		mutated = true
 	}
 	skinName := strings.TrimSpace(cfg.Panel.SkinName)

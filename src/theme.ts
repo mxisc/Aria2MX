@@ -1,10 +1,10 @@
 import { ref } from 'vue'
 
-export type AppTheme = 'ariamx'
+export type AppTheme = 'aria2mx'
 export type ColorMode = 'system' | 'light' | 'dark'
 export type ResolvedColorMode = 'light' | 'dark'
 
-export const currentTheme = ref<AppTheme>('ariamx')
+export const currentTheme = ref<AppTheme>('aria2mx')
 export const currentColorMode = ref<ColorMode>('system')
 export const currentResolvedColorMode = ref<ResolvedColorMode>('light')
 export const currentSkinEnabled = ref(false)
@@ -16,7 +16,7 @@ let removeSystemColorSchemeListener: (() => void) | null = null
 let skinLoadToken = 0
 
 export function normalizeTheme(value?: string): AppTheme {
-  return 'ariamx'
+  return 'aria2mx'
 }
 
 export function normalizeColorMode(value?: string): ColorMode {

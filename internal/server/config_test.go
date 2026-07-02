@@ -7,8 +7,8 @@ import (
 )
 
 func TestLoadConfigCreatesDefaultFile(t *testing.T) {
-	t.Setenv("ARIAMX_ADMIN_PASSWORD", "change-me")
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	t.Setenv("ARIA2MX_ADMIN_PASSWORD", "change-me")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	cfg, err := LoadConfig(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -34,8 +34,8 @@ func TestLoadConfigCreatesDefaultFile(t *testing.T) {
 	if cfg.Panel.RPCSecret == cfg.Aria2.RPCSecret {
 		t.Fatal("expected panel rpc secret to differ from aria2 rpc secret")
 	}
-	if cfg.Panel.Theme != "ariamx" {
-		t.Fatalf("expected default theme ariamx, got %q", cfg.Panel.Theme)
+	if cfg.Panel.Theme != "aria2mx" {
+		t.Fatalf("expected default theme aria2mx, got %q", cfg.Panel.Theme)
 	}
 	if cfg.Panel.ColorMode != "system" {
 		t.Fatalf("expected default color mode system, got %q", cfg.Panel.ColorMode)
@@ -76,7 +76,7 @@ func TestLoadConfigCreatesDefaultFile(t *testing.T) {
 }
 
 func TestLoadConfigMigratesManagedRPCPortFromOptions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -114,8 +114,8 @@ func TestLoadConfigMigratesManagedRPCPortFromOptions(t *testing.T) {
 	if _, ok := cfg.Aria2.Options["rpc-secure"]; ok {
 		t.Fatal("expected rpc-secure to be removed from managed options")
 	}
-	if cfg.Panel.Theme != "ariamx" {
-		t.Fatalf("expected migrated theme ariamx, got %q", cfg.Panel.Theme)
+	if cfg.Panel.Theme != "aria2mx" {
+		t.Fatalf("expected migrated theme aria2mx, got %q", cfg.Panel.Theme)
 	}
 	if cfg.Panel.ColorMode != "system" {
 		t.Fatalf("expected migrated color mode system, got %q", cfg.Panel.ColorMode)
@@ -126,7 +126,7 @@ func TestLoadConfigMigratesManagedRPCPortFromOptions(t *testing.T) {
 }
 
 func TestLoadConfigDisablesSkinWithoutTemplate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -138,7 +138,7 @@ func TestLoadConfigDisablesSkinWithoutTemplate(t *testing.T) {
   "panel": {
     "refreshIntervalMs": 1500,
     "sessionTTLSeconds": 86400,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light",
     "skinEnabled": true,
     "skinName": "  aurora  ",
@@ -164,7 +164,7 @@ func TestLoadConfigDisablesSkinWithoutTemplate(t *testing.T) {
 }
 
 func TestLoadConfigMigratesClassicThemeToDarkMode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -186,8 +186,8 @@ func TestLoadConfigMigratesClassicThemeToDarkMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Panel.Theme != "ariamx" {
-		t.Fatalf("expected migrated theme ariamx, got %q", cfg.Panel.Theme)
+	if cfg.Panel.Theme != "aria2mx" {
+		t.Fatalf("expected migrated theme aria2mx, got %q", cfg.Panel.Theme)
 	}
 	if cfg.Panel.ColorMode != "system" {
 		t.Fatalf("expected migrated color mode system, got %q", cfg.Panel.ColorMode)
@@ -195,7 +195,7 @@ func TestLoadConfigMigratesClassicThemeToDarkMode(t *testing.T) {
 }
 
 func TestLoadConfigKeepsSystemColorMode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -207,7 +207,7 @@ func TestLoadConfigKeepsSystemColorMode(t *testing.T) {
   "panel": {
     "refreshIntervalMs": 1500,
     "sessionTTLSeconds": 86400,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "system"
   }
 }`), 0o600); err != nil {
@@ -224,7 +224,7 @@ func TestLoadConfigKeepsSystemColorMode(t *testing.T) {
 }
 
 func TestLoadConfigRegeneratesDuplicatePanelRPCSecret(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -237,7 +237,7 @@ func TestLoadConfigRegeneratesDuplicatePanelRPCSecret(t *testing.T) {
     "refreshIntervalMs": 1500,
     "sessionTTLSeconds": 86400,
     "rpcSecret": "same-secret",
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light"
   }
 }`), 0o600); err != nil {
@@ -257,7 +257,7 @@ func TestLoadConfigRegeneratesDuplicatePanelRPCSecret(t *testing.T) {
 }
 
 func TestLoadConfigKeepsDisabledMCP(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -271,7 +271,7 @@ func TestLoadConfigKeepsDisabledMCP(t *testing.T) {
     "sessionTTLSeconds": 86400,
     "rpcSecret": "panel-secret",
     "mcpEnabled": false,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light"
   }
 }`), 0o600); err != nil {
@@ -288,7 +288,7 @@ func TestLoadConfigKeepsDisabledMCP(t *testing.T) {
 }
 
 func TestLoadConfigDropsUnsupportedTrackerSubscriptionSource(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -300,7 +300,7 @@ func TestLoadConfigDropsUnsupportedTrackerSubscriptionSource(t *testing.T) {
   "panel": {
     "refreshIntervalMs": 1500,
     "sessionTTLSeconds": 86400,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light",
     "trackerSubscriptionEnabled": true,
     "trackerSubscriptionSource": "invalid-source"
@@ -322,7 +322,7 @@ func TestLoadConfigDropsUnsupportedTrackerSubscriptionSource(t *testing.T) {
 }
 
 func TestLoadConfigKeepsRPCOriginSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -338,7 +338,7 @@ func TestLoadConfigKeepsRPCOriginSettings(t *testing.T) {
     "rpcOriginCheckMode": "whitelist",
     "rpcOriginWhitelist": ["ariang.example.com", "https://panel.example.com", "ariang.example.com", "  "],
     "mcpEnabled": true,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light"
   }
 }`), 0o600); err != nil {
@@ -361,7 +361,7 @@ func TestLoadConfigKeepsRPCOriginSettings(t *testing.T) {
 }
 
 func TestLoadConfigKeepsPeerGuardSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ariamx.json")
+	path := filepath.Join(t.TempDir(), "aria2mx.json")
 	if err := os.WriteFile(path, []byte(`{
   "admin": {"username":"admin","passwordHash":"hash","passwordSalt":"salt"},
   "aria2": {
@@ -375,7 +375,7 @@ func TestLoadConfigKeepsPeerGuardSettings(t *testing.T) {
     "sessionTTLSeconds": 86400,
     "rpcSecret": "panel-secret",
     "mcpEnabled": true,
-    "theme": "ariamx",
+    "theme": "aria2mx",
     "colorMode": "light"
   },
   "peerGuard": {

@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"ariamx/internal/server"
-	"ariamx/internal/web"
+	"aria2mx/internal/server"
+	"aria2mx/internal/web"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 }
 
 func run() error {
-	cfgPath := getenv("ARIAMX_CONFIG", "ariamx.json")
+	cfgPath := getenv("ARIA2MX_CONFIG", "aria2mx.json")
 	cfg, err := server.LoadConfig(cfgPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -41,7 +41,7 @@ func run() error {
 		}
 	}()
 
-	addr := getenv("ARIAMX_ADDR", ":8080")
+	addr := getenv("ARIA2MX_ADDR", ":8080")
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           app.Routes(),
@@ -55,7 +55,7 @@ func run() error {
 		errCh <- srv.ListenAndServe()
 	}()
 
-	log.Printf("AriaMX listening on %s", addr)
+	log.Printf("Aria2MX listening on %s", addr)
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

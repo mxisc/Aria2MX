@@ -1,4 +1,4 @@
-# AriaMX
+# Aria2MX
 
 带认证功能的 aria2 Web 面板。后端使用 Go 标准库，前端使用 Vue 3 + TypeScript，构建后的前端资源会嵌入 Go 二进制。
 
@@ -30,7 +30,7 @@
 
 ```bash
 pnpm install
-ARIAMX_ADDR=127.0.0.1:18081 ARIAMX_CONFIG=ariamx.json go run ./cmd/ariamx
+ARIA2MX_ADDR=127.0.0.1:18081 ARIA2MX_CONFIG=aria2mx.json go run ./cmd/aria2mx
 pnpm run dev
 ```
 
@@ -47,7 +47,7 @@ pnpm run build:allinone
 本地构建产物：
 
 ```text
-dist/ariamx
+dist/aria2mx
 ```
 
 如果需要预生成全部运行时归档，再执行：
@@ -71,17 +71,17 @@ CI 会固定安装 `pnpm@10.14.0`，避免 Debian Bookworm 默认 Node.js 18 环
 ## 运行
 
 ```bash
-ARIAMX_ADDR=:8080 \
-ARIAMX_CONFIG=ariamx.json \
-ARIAMX_ADMIN_PASSWORD='change-me' \
-./dist/ariamx
+ARIA2MX_ADDR=:8080 \
+ARIA2MX_CONFIG=aria2mx.json \
+ARIA2MX_ADMIN_PASSWORD='change-me' \
+./dist/aria2mx
 ```
 
-首次启动会创建 `ARIAMX_CONFIG` 指定的配置文件。默认用户名是 `admin`；建议首次启动显式设置 `ARIAMX_ADMIN_PASSWORD`。
+首次启动会创建 `ARIA2MX_CONFIG` 指定的配置文件。默认用户名是 `admin`；建议首次启动显式设置 `ARIA2MX_ADMIN_PASSWORD`。
 
-默认情况下，AriaMX 会在当前配置目录旁创建 `ariamx-data/aria2/`，自动释放并启动内置 aria2。只有在你显式设置 `ARIAMX_ARIA2_RPC` 时，才会切回外部 aria2 RPC 模式。
+默认情况下，Aria2MX 会在当前配置目录旁创建 `aria2mx-data/aria2/`，自动释放并启动内置 aria2。只有在你显式设置 `ARIA2MX_ARIA2_RPC` 时，才会切回外部 aria2 RPC 模式。
 
-如果内置 aria2 的目标 RPC 端口已被其他程序占用，AIO 会从当前目标端口开始按 `+10` 递增寻找空闲端口，并把最终端口写回 `ariamx.json`。例如默认 `16800` 被占用时，会依次尝试 `16810`、`16820`。
+如果内置 aria2 的目标 RPC 端口已被其他程序占用，AIO 会从当前目标端口开始按 `+10` 递增寻找空闲端口，并把最终端口写回 `aria2mx.json`。例如默认 `16800` 被占用时，会依次尝试 `16810`、`16820`。
 
 登录后，面板层 RPC 代理路径固定为：
 
@@ -97,7 +97,7 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 {"jsonrpc":"2.0","id":"1","method":"aria2.getVersion","params":["token:<panel rpc secret>"]}
 ```
 
-该 Secret 保存在 `ariamx.json` 的 `panel.rpcSecret`，与 aria2 内部使用的 `aria2.rpcSecret` 始终独立。AIO 模式下内置 aria2 只监听 `127.0.0.1`，外部不能直接绕过面板访问它。
+该 Secret 保存在 `aria2mx.json` 的 `panel.rpcSecret`，与 aria2 内部使用的 `aria2.rpcSecret` 始终独立。AIO 模式下内置 aria2 只监听 `127.0.0.1`，外部不能直接绕过面板访问它。
 
 登录后的“连接信息”页面会直接显示 HTTP / WS 连接方式以及当前面板 RPC Secret。
 
@@ -117,7 +117,7 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 /mcp
 ```
 
-该入口使用同一个 `panel.rpcSecret` 做鉴权，支持 `Authorization: Bearer <panel rpc secret>`、`X-AriaMX-Secret` 和 `?secret=<panel rpc secret>`。当前 MCP 按 `2024-11-05` 协议版本提供完整的服务端原语：
+该入口使用同一个 `panel.rpcSecret` 做鉴权，支持 `Authorization: Bearer <panel rpc secret>`、`X-Aria2MX-Secret` 和 `?secret=<panel rpc secret>`。当前 MCP 按 `2024-11-05` 协议版本提供完整的服务端原语：
 
 - `initialize`
 - `ping`
@@ -139,7 +139,7 @@ ARIAMX_ADMIN_PASSWORD='change-me' \
 
 登录后的“连接信息”页面会展示 MCP 地址与初始化请求；“MCP”页面只展示可用工具列表。若在“面板设置”里关闭 MCP，`/mcp` 会直接拒绝访问。
 
-登录后可在“设置”页切换 `AriaMX` 皮肤的 `跟随系统` / `浅色模式` / `深色模式`。显示模式会写入 `ariamx.json` 的 `panel.theme` / `panel.colorMode`，后续登录会继续沿用；选择“跟随系统”后，系统深浅色变化会实时同步到面板。
+登录后可在“设置”页切换 `Aria2MX` 皮肤的 `跟随系统` / `浅色模式` / `深色模式`。显示模式会写入 `aria2mx.json` 的 `panel.theme` / `panel.colorMode`，后续登录会继续沿用；选择“跟随系统”后，系统深浅色变化会实时同步到面板。
 
 “设置”页还支持背景图片配置：可单独保存 `panel.skinEnabled`、`panel.skinName` 和 `panel.skinApiTemplate`。开启后，浏览器会直接请求解析后的图片地址，并把它应用到登录页和主面板背景。图片地址需要能被浏览器直接访问，且在 HTTPS 页面里最终仍返回真实图片内容；如果接口会跳到 HTTP、需要额外鉴权，或最终返回的不是图片，背景就不会显示。
 

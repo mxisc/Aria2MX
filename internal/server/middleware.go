@@ -37,7 +37,7 @@ func (s *Server) authenticatedSession(r *http.Request) (session, bool, bool) {
 func (s *Server) matchesPanelRPCSecret(r *http.Request) bool {
 	for _, candidate := range []string{
 		extractBearerToken(r.Header.Get("Authorization")),
-		strings.TrimSpace(r.Header.Get("X-AriaMX-Secret")),
+		strings.TrimSpace(r.Header.Get("X-Aria2MX-Secret")),
 		strings.TrimSpace(r.URL.Query().Get("secret")),
 	} {
 		if candidate != "" && s.matchesPanelRPCSecretValue(candidate) {

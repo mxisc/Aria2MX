@@ -1,4 +1,4 @@
-module ariamx
+module aria2mx
 
 go 1.23
 

@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Runtime config and secrets
+aria2mx.json
+aria2mx.json.tmp
+aria2mx-data/
 ariamx.json
 ariamx.json.tmp
 ariamx-data/
@@ -21,6 +24,7 @@ dist-ssr
 *.local
 
 # Go build and test artifacts
+/aria2mx
 /ariamx
 *.test
 coverage.out

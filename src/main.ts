@@ -4,7 +4,7 @@ import App from './App.vue'
 import router from './router'
 import { applyTheme } from './theme'
 
-applyTheme('ariamx', 'light')
+applyTheme('aria2mx', 'light')
 
 // 创建Vue应用实例
 const app = createApp(App)

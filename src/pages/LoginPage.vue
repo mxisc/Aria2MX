@@ -36,7 +36,7 @@ async function login() {
         <p class="eyebrow">
           ARIA2 CONTROL SURFACE
         </p>
-        <h1>AriaMX</h1>
+        <h1>Aria2MX</h1>
       </div>
       <form class="login-form" @submit.prevent="login">
         <label>

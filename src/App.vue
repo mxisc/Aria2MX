@@ -51,7 +51,7 @@ async function loadPublicTheme() {
     applyTheme(config.theme, config.colorMode)
     applySkin(config.skinEnabled, config.skinName, config.skinApiTemplate)
   } catch {
-    applyTheme('ariamx', 'system')
+    applyTheme('aria2mx', 'system')
     applySkin(false, 'default', '')
   }
 }
@@ -59,7 +59,7 @@ async function loadPublicTheme() {
 
 <template>
   <div v-if="!ready" class="boot-screen">
-    AriaMX 正在启动
+    Aria2MX 正在启动
   </div>
   <router-view v-else :authenticated="authenticated" @authenticated="onAuthenticated" @logged-out="onLoggedOut" />
 </template>

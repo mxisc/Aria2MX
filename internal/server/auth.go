@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const sessionCookieName = "ariamx_session"
+const sessionCookieName = "aria2mx_session"
 const (
 	passwordSchemeClientSHA256PBKDF2 = "client_sha256_pbkdf2"
 )

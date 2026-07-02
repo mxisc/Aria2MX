@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"ariamx/internal/version"
+	"aria2mx/internal/version"
 )
 
 type Options struct {
@@ -323,7 +323,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if payload.MCPEnabled != nil {
 			s.cfg.Panel.MCPEnabled = *payload.MCPEnabled
 		}
-		if payload.Theme != nil && *payload.Theme == "ariamx" {
+		if payload.Theme != nil && *payload.Theme == "aria2mx" {
 			s.cfg.Panel.Theme = *payload.Theme
 		}
 		if payload.ColorMode != nil && (*payload.ColorMode == "system" || *payload.ColorMode == "light" || *payload.ColorMode == "dark") {

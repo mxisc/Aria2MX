@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"ariamx/internal/aria2embed"
+	"aria2mx/internal/aria2embed"
 )
 
 var managedRestartOptionKeys = map[string]struct{}{
@@ -541,9 +541,9 @@ func (m *ManagedAria2) startLocked() error {
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), runtimeEnv...)
 	if configPath, err := filepath.Abs(m.configPath); err == nil {
-		cmd.Env = append(cmd.Env, "ARIAMX_CONFIG_PATH="+configPath)
+		cmd.Env = append(cmd.Env, "ARIA2MX_CONFIG_PATH="+configPath)
 	}
-	cmd.Env = append(cmd.Env, "ARIAMX_STATE_DIR="+root)
+	cmd.Env = append(cmd.Env, "ARIA2MX_STATE_DIR="+root)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
@@ -751,7 +751,7 @@ func (m *ManagedAria2) stateRoot(cfg Aria2Config) string {
 	if base == "." || base == "" {
 		base = "."
 	}
-	root := filepath.Join(base, "ariamx-data", "aria2")
+	root := filepath.Join(base, "aria2mx-data", "aria2")
 	if absolute, err := filepath.Abs(root); err == nil {
 		return absolute
 	}

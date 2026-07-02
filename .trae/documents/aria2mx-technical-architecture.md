@@ -1,5 +1,5 @@
 ## 1. 架构设计
-AriaMX 采用 Go 单进程服务：后端负责认证、配置、静态资源托管和 aria2 JSON-RPC 代理；前端构建产物通过 `embed` 打入 Go 二进制，发布时主要交付一个可执行文件。
+Aria2MX 采用 Go 单进程服务：后端负责认证、配置、静态资源托管和 aria2 JSON-RPC 代理；前端构建产物通过 `embed` 打入 Go 二进制，发布时主要交付一个可执行文件。
 
 ```mermaid
 flowchart TD

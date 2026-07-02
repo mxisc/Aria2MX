@@ -31,9 +31,9 @@ build:allinone:
     - pnpm run build
     - node scripts/prepare-aria2-runtime.mjs "$RUNTIME_TARGET"
     - mkdir -p dist/release
-    - GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -tags allinone -o "dist/release/ariamx-${GOOS}-${GOARCH}" ./cmd/ariamx
+    - GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -tags allinone -o "dist/release/aria2mx-${GOOS}-${GOARCH}" ./cmd/aria2mx
   artifacts:
-    name: "ariamx-${GOOS}-${GOARCH}-${CI_COMMIT_SHORT_SHA}"
+    name: "aria2mx-${GOOS}-${GOARCH}-${CI_COMMIT_SHORT_SHA}"
     paths:
-      - dist/release/ariamx-${GOOS}-${GOARCH}
+      - dist/release/aria2mx-${GOOS}-${GOARCH}
     expire_in: 7 days

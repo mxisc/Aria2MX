@@ -60,7 +60,7 @@ for (const target of selectedTargets) {
 
 async function prepareTarget(target, config) {
   console.log(`Preparing aria2 runtime for ${target}`)
-  const tempRoot = await mkdtemp(path.join(tmpdir(), `ariamx-${target}-`))
+  const tempRoot = await mkdtemp(path.join(tmpdir(), `aria2mx-${target}-`))
   const downloadDir = path.join(tempRoot, 'downloads')
   const stageDir = path.join(tempRoot, 'stage')
   await mkdir(downloadDir, { recursive: true })
@@ -91,7 +91,7 @@ async function prepareTarget(target, config) {
         basename: item.basename,
       })),
     }
-    await writeFile(path.join(stageDir, '.ariamx-runtime-manifest.json'), JSON.stringify(manifest, null, 2))
+    await writeFile(path.join(stageDir, '.aria2mx-runtime-manifest.json'), JSON.stringify(manifest, null, 2))
 
     const outputPath = path.join(outputDir, `${target}.tar.gz`)
     const tar = spawnSync('tar', ['-czf', outputPath, '-C', stageDir, '.'], {
@@ -206,7 +206,7 @@ async function downloadFile(url, targetPath) {
 }
 
 async function extractCondaPackage(archivePath, stageDir) {
-  const outerDir = await mkdtemp(path.join(tmpdir(), 'ariamx-conda-'))
+  const outerDir = await mkdtemp(path.join(tmpdir(), 'aria2mx-conda-'))
   try {
     let result = spawnSync('bsdtar', ['-xf', archivePath, '-C', outerDir], { stdio: 'inherit' })
     if (result.status !== 0) {

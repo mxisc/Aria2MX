@@ -40,7 +40,7 @@ func (c *Aria2Client) Call(req Aria2CallRequest) (interface{}, error) {
 
 	payload := map[string]interface{}{
 		"jsonrpc": "2.0",
-		"id":      "ariamx",
+		"id":      "aria2mx",
 		"method":  req.Method,
 		"params":  params,
 	}

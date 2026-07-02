@@ -262,7 +262,7 @@ func newPanelRPCTestServer(t *testing.T) (*Server, *observedRPCRequest, func()) 
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
-			"id":      "ariamx",
+			"id":      "aria2mx",
 			"result":  result,
 		})
 	}))

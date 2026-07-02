@@ -22,7 +22,7 @@ func TestRestartTaskReaddsURIAndRemovesOldResult(t *testing.T) {
 		case "aria2.tellStatus":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"gid":    "old-gid",
 					"status": "error",
@@ -39,7 +39,7 @@ func TestRestartTaskReaddsURIAndRemovesOldResult(t *testing.T) {
 		case "aria2.getOption":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"dir":   "/tmp/downloads",
 					"split": "16",
@@ -48,13 +48,13 @@ func TestRestartTaskReaddsURIAndRemovesOldResult(t *testing.T) {
 		case "aria2.addUri":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "new-gid",
 			})
 		case "aria2.removeDownloadResult":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "OK",
 			})
 		default:
@@ -130,7 +130,7 @@ func TestRestartTaskArchivesControlFileOnPieceLengthConflict(t *testing.T) {
 		case "aria2.tellStatus":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"gid":    "old-gid",
 					"status": "error",
@@ -147,7 +147,7 @@ func TestRestartTaskArchivesControlFileOnPieceLengthConflict(t *testing.T) {
 		case "aria2.getOption":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  map[string]interface{}{},
 			})
 		case "aria2.addUri":
@@ -155,7 +155,7 @@ func TestRestartTaskArchivesControlFileOnPieceLengthConflict(t *testing.T) {
 			if addAttempts == 1 {
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"jsonrpc": "2.0",
-					"id":      "ariamx",
+					"id":      "aria2mx",
 					"error": map[string]interface{}{
 						"code":    10,
 						"message": "Detected a change in piece length",
@@ -165,13 +165,13 @@ func TestRestartTaskArchivesControlFileOnPieceLengthConflict(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "new-gid",
 			})
 		case "aria2.removeDownloadResult":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result":  "OK",
 			})
 		default:
@@ -222,7 +222,7 @@ func TestRestartTaskRejectsActiveTask(t *testing.T) {
 		case "aria2.tellStatus":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"jsonrpc": "2.0",
-				"id":      "ariamx",
+				"id":      "aria2mx",
 				"result": map[string]interface{}{
 					"gid":    "active-gid",
 					"status": "active",

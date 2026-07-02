@@ -143,7 +143,7 @@ func TestWriteConfigFileKeepsTrackerListOnSingleLine(t *testing.T) {
 			DefaultDownloadDir: "/tmp/downloads",
 		},
 	}
-	manager := NewManagedAria2("ariamx.json", cfg, &sync.RWMutex{}, nil)
+	manager := NewManagedAria2("aria2mx.json", cfg, &sync.RWMutex{}, nil)
 	root := t.TempDir()
 
 	confPath, err := manager.writeConfigFile(root, Aria2Config{
@@ -190,9 +190,9 @@ func TestEffectiveManagedOptionsAllowsUserOverride(t *testing.T) {
 		},
 	}
 	cfgMu := &sync.RWMutex{}
-	manager := NewManagedAria2("ariamx.json", cfg, cfgMu, nil)
+	manager := NewManagedAria2("aria2mx.json", cfg, cfgMu, nil)
 
-	options := manager.effectiveManagedOptions("/tmp/ariamx-data/aria2", Aria2Config{
+	options := manager.effectiveManagedOptions("/tmp/aria2mx-data/aria2", Aria2Config{
 		Options: map[string]string{
 			"disk-cache": "32M",
 			"dir":        "/data/custom",
@@ -281,7 +281,7 @@ func TestCanReuseExistingLocked(t *testing.T) {
 			ManagedRPCPort: port,
 		},
 	}
-	manager := NewManagedAria2("ariamx.json", cfg, &sync.RWMutex{}, NewAria2Client(func() Aria2Config {
+	manager := NewManagedAria2("aria2mx.json", cfg, &sync.RWMutex{}, NewAria2Client(func() Aria2Config {
 		return cfg.Aria2
 	}))
 
@@ -331,7 +331,7 @@ func TestStopLockedShutsDownReusedProcess(t *testing.T) {
 		},
 	}
 	cfgMu := &sync.RWMutex{}
-	manager := NewManagedAria2("ariamx.json", cfg, cfgMu, NewAria2Client(func() Aria2Config {
+	manager := NewManagedAria2("aria2mx.json", cfg, cfgMu, NewAria2Client(func() Aria2Config {
 		cfgMu.RLock()
 		defer cfgMu.RUnlock()
 		return cfg.Aria2

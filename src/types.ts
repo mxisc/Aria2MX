@@ -23,7 +23,7 @@ export type AppConfig = {
   mcpEnabled: boolean
   refreshIntervalMs: number
   defaultDownloadDir: string
-  theme: 'ariamx'
+  theme: 'aria2mx'
   colorMode: 'system' | 'light' | 'dark'
   skinEnabled: boolean
   skinName: string
@@ -31,7 +31,7 @@ export type AppConfig = {
 }
 
 export type PublicPanelStyle = {
-  theme: 'ariamx'
+  theme: 'aria2mx'
   colorMode: 'system' | 'light' | 'dark'
   skinEnabled: boolean
   skinName: string

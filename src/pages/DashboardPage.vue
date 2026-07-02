@@ -233,7 +233,7 @@ function handleSettingsSaved(nextRefreshIntervalMs: number) {
               <span class="sidebar-brand-core">A</span>
             </div>
             <div class="sidebar-brand-copy">
-              <strong>AriaMX</strong>
+              <strong>Aria2MX</strong>
               <span>下载控制面板</span>
             </div>
         </div>

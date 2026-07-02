@@ -53,7 +53,7 @@ const localPeerRow = computed<PeerRow | null>(() => {
   return {
     key: `local-${task.gid}`,
     address: '本机',
-    addressTitle: '当前 AriaMX / aria2 会话',
+    addressTitle: '当前 Aria2MX / aria2 会话',
     downloadSpeed: task.downloadSpeed || '0',
     uploadSpeed: task.uploadSpeed || '0',
     seeder: task.seeder,

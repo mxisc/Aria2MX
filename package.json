@@ -1,5 +1,5 @@
 {
-  "name": "ariamx",
+  "name": "aria2mx",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,8 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "prepare:aria2": "node scripts/prepare-aria2-runtime.mjs",
     "prepare:aria2:all": "node scripts/prepare-aria2-runtime.mjs all",
-    "build:server": "go build -o dist/ariamx ./cmd/ariamx",
-    "build:allinone": "pnpm run build && pnpm run prepare:aria2 && go build -tags allinone -o dist/ariamx ./cmd/ariamx",
+    "build:server": "go build -o dist/aria2mx ./cmd/aria2mx",
+    "build:allinone": "pnpm run build && pnpm run prepare:aria2 && go build -tags allinone -o dist/aria2mx ./cmd/aria2mx",
     "build:all": "pnpm run build && pnpm run build:server",
     "preview": "vite preview",
     "check": "vue-tsc -b",

@@ -175,7 +175,7 @@ func TestHandleMCPResourcesRead(t *testing.T) {
 	server, observed, closeFn := newPanelRPCTestServer(t)
 	defer closeFn()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"read","method":"resources/read","params":{"uri":"ariamx://task/gid-stopped-1"}}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"read","method":"resources/read","params":{"uri":"aria2mx://task/gid-stopped-1"}}`))
 	req.Header.Set("Authorization", "Bearer panel-secret")
 	recorder := httptest.NewRecorder()
 
@@ -205,7 +205,7 @@ func TestHandleMCPPromptsGet(t *testing.T) {
 	server, observed, closeFn := newPanelRPCTestServer(t)
 	defer closeFn()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"prompt","method":"prompts/get","params":{"name":"ariamx_diagnose_task_failure","arguments":{"gid":"gid-stopped-1"}}}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"prompt","method":"prompts/get","params":{"name":"aria2mx_diagnose_task_failure","arguments":{"gid":"gid-stopped-1"}}}`))
 	req.Header.Set("Authorization", "Bearer panel-secret")
 	recorder := httptest.NewRecorder()
 
@@ -235,7 +235,7 @@ func TestHandleMCPCompletion(t *testing.T) {
 	server, _, closeFn := newPanelRPCTestServer(t)
 	defer closeFn()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"complete","method":"completion/complete","params":{"ref":{"type":"ref/resource","uri":"ariamx://tasks/{bucket}"},"argument":{"name":"bucket","value":"st"}}}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"complete","method":"completion/complete","params":{"ref":{"type":"ref/resource","uri":"aria2mx://tasks/{bucket}"},"argument":{"name":"bucket","value":"st"}}}`))
 	req.Header.Set("Authorization", "Bearer panel-secret")
 	recorder := httptest.NewRecorder()
 
@@ -266,7 +266,7 @@ func TestHandleMCPConnectionResourceDoesNotExposeInternalRPC(t *testing.T) {
 	server, _, closeFn := newPanelRPCTestServer(t)
 	defer closeFn()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"read","method":"resources/read","params":{"uri":"ariamx://connection/info"}}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"read","method":"resources/read","params":{"uri":"aria2mx://connection/info"}}`))
 	req.Header.Set("Authorization", "Bearer panel-secret")
 	recorder := httptest.NewRecorder()
 

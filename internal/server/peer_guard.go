@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	peerGuardPFAnchor      = "com.apple/250.AriaMX"
-	peerGuardNFTTableName  = "ariamx_peer_guard"
-	peerGuardIPTChainName  = "ARIAMX_PEER_GUARD"
+	peerGuardPFAnchor      = "com.apple/250.Aria2MX"
+	peerGuardNFTTableName  = "aria2mx_peer_guard"
+	peerGuardIPTChainName  = "ARIA2MX_PEER_GUARD"
 	peerGuardAutoBanPeriod = 30 * time.Second
 	peerGuardBanDuration   = 30 * time.Minute
 	peerGuardAutoBanReason = "持续从本机获取数据却不回传"
@@ -484,7 +484,7 @@ func detectFirewalldFirewallState() peerGuardFirewallState {
 			Mode:                "firewalld",
 			Ready:               true,
 			Operable:            false,
-			ActionBlockedReason: "当前进程没有管理 firewalld 的权限，请使用具备 root 权限的方式运行 AriaMX。",
+			ActionBlockedReason: "当前进程没有管理 firewalld 的权限，请使用具备 root 权限的方式运行 Aria2MX。",
 		}
 	}
 	if strings.TrimSpace(output) != "running" {
@@ -508,7 +508,7 @@ func detectUFFirewallState() peerGuardFirewallState {
 			Mode:                "ufw",
 			Ready:               true,
 			Operable:            false,
-			ActionBlockedReason: "当前进程没有管理 ufw 的权限，请使用具备 root 权限的方式运行 AriaMX。",
+			ActionBlockedReason: "当前进程没有管理 ufw 的权限，请使用具备 root 权限的方式运行 Aria2MX。",
 		}
 	}
 	if !strings.Contains(strings.ToLower(output), "status: active") {
@@ -535,7 +535,7 @@ func detectPFFirewallState() peerGuardFirewallState {
 			Mode:                "pf",
 			Ready:               true,
 			Operable:            false,
-			ActionBlockedReason: "当前进程没有管理 pf 防火墙的权限，请使用具备管理员权限的方式运行 AriaMX。",
+			ActionBlockedReason: "当前进程没有管理 pf 防火墙的权限，请使用具备管理员权限的方式运行 Aria2MX。",
 		}
 	}
 	return peerGuardFirewallState{
@@ -560,7 +560,7 @@ func detectNFTFirewallState() peerGuardFirewallState {
 			Mode:                "nft",
 			Ready:               true,
 			Operable:            false,
-			ActionBlockedReason: "当前进程没有管理 nft 防火墙的权限，请使用具备 root 权限的方式运行 AriaMX。",
+			ActionBlockedReason: "当前进程没有管理 nft 防火墙的权限，请使用具备 root 权限的方式运行 Aria2MX。",
 		}
 	}
 	return peerGuardFirewallState{
@@ -587,7 +587,7 @@ func detectIPTablesFirewallState() peerGuardFirewallState {
 				Mode:                "iptables",
 				Ready:               true,
 				Operable:            false,
-				ActionBlockedReason: "当前进程没有管理 iptables 防火墙的权限，请使用具备 root 权限的方式运行 AriaMX。",
+				ActionBlockedReason: "当前进程没有管理 iptables 防火墙的权限，请使用具备 root 权限的方式运行 Aria2MX。",
 			}
 		}
 	}
@@ -597,7 +597,7 @@ func detectIPTablesFirewallState() peerGuardFirewallState {
 				Mode:                "iptables",
 				Ready:               true,
 				Operable:            false,
-				ActionBlockedReason: "当前进程没有管理 iptables 防火墙的权限，请使用具备 root 权限的方式运行 AriaMX。",
+				ActionBlockedReason: "当前进程没有管理 iptables 防火墙的权限，请使用具备 root 权限的方式运行 Aria2MX。",
 			}
 		}
 	}
@@ -614,10 +614,10 @@ func (s *Server) applyPFFirewall(peers []PeerBanRecord) error {
 		return errors.New("封禁规则写入失败，请稍后重试。")
 	}
 	if _, err := runFirewallCommand("/sbin/pfctl", "-E"); err != nil {
-		return errors.New("系统防火墙未能启用，节点尚未封禁。请用具备权限的方式运行 AriaMX 后重试。")
+		return errors.New("系统防火墙未能启用，节点尚未封禁。请用具备权限的方式运行 Aria2MX 后重试。")
 	}
 	if _, err := runFirewallCommand("/sbin/pfctl", "-a", peerGuardPFAnchor, "-f", rulesPath); err != nil {
-		return errors.New("系统防火墙规则应用失败，节点尚未封禁。请用具备权限的方式运行 AriaMX 后重试。")
+		return errors.New("系统防火墙规则应用失败，节点尚未封禁。请用具备权限的方式运行 Aria2MX 后重试。")
 	}
 	return nil
 }
@@ -640,7 +640,7 @@ func (s *Server) applyFirewalldFirewall(previous, peers []PeerBanRecord) error {
 			continue
 		}
 		if err := firewalldAddRule(firewallCmdPath, ip); err != nil {
-			return errors.New("firewalld 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 AriaMX 后重试。")
+			return errors.New("firewalld 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 Aria2MX 后重试。")
 		}
 	}
 	return nil
@@ -694,7 +694,7 @@ func (s *Server) applyUFWFirewall(previous, peers []PeerBanRecord) error {
 			continue
 		}
 		if err := ufwAddRule(ufwPath, ip); err != nil {
-			return errors.New("ufw 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 AriaMX 后重试。")
+			return errors.New("ufw 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 Aria2MX 后重试。")
 		}
 	}
 	return nil
@@ -736,7 +736,7 @@ func (s *Server) applyNFTFirewall(peers []PeerBanRecord) error {
 	}
 	_, _ = runFirewallCommand(nftPath, "delete", "table", "inet", peerGuardNFTTableName)
 	if _, err := runFirewallCommand(nftPath, "-f", rulesPath); err != nil {
-		return errors.New("系统防火墙规则应用失败，节点尚未封禁。请用具备权限的方式运行 AriaMX 后重试。")
+		return errors.New("系统防火墙规则应用失败，节点尚未封禁。请用具备权限的方式运行 Aria2MX 后重试。")
 	}
 	return nil
 }
@@ -760,12 +760,12 @@ func (s *Server) applyIPTablesFirewall(peers []PeerBanRecord) error {
 
 	if iptablesErr == nil {
 		if err := syncIPTablesChain(iptablesPath, ipv4); err != nil {
-			return errors.New("iptables 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 AriaMX 后重试。")
+			return errors.New("iptables 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 Aria2MX 后重试。")
 		}
 	}
 	if ip6tablesErr == nil {
 		if err := syncIPTablesChain(ip6tablesPath, ipv6); err != nil {
-			return errors.New("ip6tables 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 AriaMX 后重试。")
+			return errors.New("ip6tables 规则应用失败，节点尚未封禁。请用具备 root 权限的方式运行 Aria2MX 后重试。")
 		}
 	}
 	return nil
@@ -819,12 +819,12 @@ func runFirewallCommand(binary string, args ...string) (string, error) {
 }
 
 func (s *Server) writePFRules(peers []PeerBanRecord) (string, error) {
-	rulesPath := filepath.Join(filepath.Dir(s.configPath), "ariamx-data", "peer-guard", "pf.conf")
+	rulesPath := filepath.Join(filepath.Dir(s.configPath), "aria2mx-data", "peer-guard", "pf.conf")
 	if err := os.MkdirAll(filepath.Dir(rulesPath), 0o755); err != nil {
 		return "", err
 	}
 	builder := strings.Builder{}
-	builder.WriteString("table <ariamx_peer_guard> persist")
+	builder.WriteString("table <aria2mx_peer_guard> persist")
 	if len(peers) > 0 {
 		builder.WriteString(" { ")
 		for index, peer := range peers {
@@ -836,8 +836,8 @@ func (s *Server) writePFRules(peers []PeerBanRecord) (string, error) {
 		builder.WriteString(" }")
 	}
 	builder.WriteString("\n")
-	builder.WriteString("block drop quick from <ariamx_peer_guard> to any\n")
-	builder.WriteString("block drop quick to <ariamx_peer_guard> from any\n")
+	builder.WriteString("block drop quick from <aria2mx_peer_guard> to any\n")
+	builder.WriteString("block drop quick to <aria2mx_peer_guard> from any\n")
 	if err := os.WriteFile(rulesPath, []byte(builder.String()), 0o600); err != nil {
 		return "", err
 	}
@@ -845,7 +845,7 @@ func (s *Server) writePFRules(peers []PeerBanRecord) (string, error) {
 }
 
 func (s *Server) writeNFTRules(peers []PeerBanRecord) (string, error) {
-	rulesPath := filepath.Join(filepath.Dir(s.configPath), "ariamx-data", "peer-guard", "nft.conf")
+	rulesPath := filepath.Join(filepath.Dir(s.configPath), "aria2mx-data", "peer-guard", "nft.conf")
 	if err := os.MkdirAll(filepath.Dir(rulesPath), 0o755); err != nil {
 		return "", err
 	}
