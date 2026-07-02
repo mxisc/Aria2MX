@@ -17,7 +17,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git clone --mirror https://gitlab.com/mxisc/aria2mx.git repo.git
+          git clone --bare https://gitlab.com/mxisc/aria2mx.git repo.git
           cd repo.git
           git remote set-url --push origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --prune origin "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
