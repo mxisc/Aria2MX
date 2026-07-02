@@ -2,6 +2,7 @@ image: golang:1.23-bookworm
 
 stages:
   - build
+  - release
 
 variables:
   CGO_ENABLED: "0"
@@ -37,3 +38,23 @@ build:allinone:
     paths:
       - dist/release/aria2mx-${GOOS}-${GOARCH}
     expire_in: 7 days
+
+release:test:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "Creating GitLab release for ${CI_COMMIT_TAG}"
+  release:
+    tag_name: "$CI_COMMIT_TAG"
+    name: "Aria2MX $CI_COMMIT_TAG"
+    description: "Test release for $CI_COMMIT_TAG built from $CI_COMMIT_SHA. CI artifacts expire after 7 days."
+    assets:
+      links:
+        - name: "aria2mx-linux-amd64"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:allinone:%20[linux,%20amd64,%20linux-amd64]"
+        - name: "aria2mx-linux-arm64"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:allinone:%20[linux,%20arm64,%20linux-arm64]"
+        - name: "aria2mx-darwin-arm64"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:allinone:%20[darwin,%20arm64,%20darwin-arm64]"
