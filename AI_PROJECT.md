@@ -88,3 +88,4 @@
 - 症状：项目按全新发布从 AriaMX 改成 Aria2MX 时，如果还保留旧环境变量、旧 RPC Header 或旧命令名，会让新发布语义变成隐性兼容。原因：品牌名、二进制名、配置名和运行入口混在同一批字符串里，容易顺手留下旧入口。预防：全新发布改名时只保留新 `ARIA2MX_*` 环境变量、`X-Aria2MX-Secret` Header、`aria2mx` 命令和 `aria2mx-data` 运行目录；旧本地文件最多作为忽略项防止误提交，不参与运行逻辑。
 - 症状：推送测试 tag 后 GitLab 只出现 pipeline artifacts，Releases 页面看不到发布。原因：CI 只有 build job 和 artifacts，没有 release stage 创建 GitLab Release 对象。预防：tag pipeline 需要单独的 release job，使用 `release-cli` 在构建矩阵完成后创建 Release，并把各平台 artifact 下载链接挂到 release assets。
 - 症状：GitLab Release assets 指向 job artifacts 时，下载链接会随 artifacts 过期而失效。原因：artifacts 是 CI 临时产物，不适合当长期发布包。预防：tag pipeline 应先把构建出的各平台二进制上传到 Generic Package Registry，再让 Release assets 指向 package registry URL。
+- 症状：GitHub 仓库需要作为 GitLab 主仓库镜像，但 GitLab API token 不可用时无法配置 GitLab push mirror。原因：本机 GitLab CLI 授权过期，只能继续使用 Git over SSH 和 GitHub CLI。预防：把 GitHub 镜像工作流提交到 GitLab 主仓库，让 GitHub Actions 定时或手动从 GitLab `clone --mirror` 后用 `GITHUB_TOKEN` 强推到 GitHub；首次同步可用本机 `gh` token 做一次安全的 HTTPS mirror push。
