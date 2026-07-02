@@ -70,8 +70,6 @@ CI 会固定安装 `pnpm@10.14.0`，避免 Debian Bookworm 默认 Node.js 18 环
 
 推送 tag 时，CI 会在矩阵构建成功后把三个平台的二进制上传到 GitLab Generic Package Registry，然后创建 GitLab Release，并把永久 package 下载链接挂到 Release assets。
 
-GitHub 上的 `mxisc/Aria2MX` 是 GitLab `mxisc/aria2mx` 的镜像仓库。镜像由 GitLab Push Mirror 主动同步，GitLab 仍是主仓库。
-
 ## 运行
 
 ```bash
