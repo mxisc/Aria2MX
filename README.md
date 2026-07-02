@@ -66,6 +66,8 @@ pnpm run prepare:aria2:all
 
 每个 CI 产物都只内嵌自身平台所需的 aria2 运行时，因此发布包不会再出现一个 `93M` 的“全平台合体版”。
 
+CI 会固定安装 `pnpm@10.14.0`，避免 Debian Bookworm 默认 Node.js 18 环境被最新版 pnpm 的 Node 版本要求卡住。
+
 ## 运行
 
 ```bash

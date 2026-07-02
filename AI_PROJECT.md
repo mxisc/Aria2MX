@@ -84,3 +84,4 @@
 - 症状：Aria2 配置页的选项行会被裁切，说明文本、类型标签和输入框下半部分显示异常。原因：为了修背景图模式的圆角与阴影问题，把 `option-row` 也套用了 `overflow: hidden` 和卡片裁切逻辑，但这个列表本身包含大量多行说明，行高必须由内容自然撑开。预防：`Aria2OptionsPanel` 的 `option-row` 不能按普通卡片处理，不要给它加裁切或强制卡片化效果，优先保留自然高度和顶部对齐布局。
 - 症状：背景图开启后，右侧内容区滚动条会显得很突兀，和整套半透明界面不协调。原因：项目默认没有给这些滚动容器定制 scrollbar，浏览器会直接使用系统默认样式，轨道和滑块对比过强。预防：对右侧主要滚动容器统一提供细滚动条样式，并在背景图模式下通过 CSS 变量进一步弱化 thumb/track 对比度。
 - 症状：任务详情的“连接状态”里 peer 行下载/上传方向看起来和 AriaNg 相反，用户会觉得“我从对方下载，为什么对方这一行还显示下载”。原因：aria2 `getPeers` 原始速度字段是按本机视角给出的，而 AriaNg 在展示 peer 列表时会先交换 `downloadSpeed` 与 `uploadSpeed`，改成按对端 peer 视角显示。预防：如果要和 AriaNg 对齐，远端 peer 行必须交换这两个字段；本机补充行则继续保留本机视角。
+- 症状：GitLab CI 在 `pnpm install --frozen-lockfile` 前失败，日志显示最新版 pnpm 要求 Node.js `>=22.13`，但 `golang:1.23-bookworm` 通过 apt 安装的是 Node.js 18。原因：CI 使用 `npm install -g pnpm` 拉取浮动最新版，pnpm 的 engine 要求变化后和系统 Node 不兼容。预防：CI 固定安装与当前 Node/lockfile 兼容的 pnpm 版本，例如 `pnpm@10.14.0`，不要在构建脚本里依赖全局 latest。
