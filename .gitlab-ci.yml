@@ -33,7 +33,8 @@ build:allinone:
     - pnpm run build
     - node scripts/prepare-aria2-runtime.mjs "$RUNTIME_TARGET"
     - mkdir -p dist/release
-    - GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -tags allinone -o "dist/release/aria2mx-${GOOS}-${GOARCH}" ./cmd/aria2mx
+    - PANEL_VERSION="${CI_COMMIT_TAG:-1.0.0}"
+    - GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -tags allinone -ldflags "-X aria2mx/internal/version.PanelVersion=${PANEL_VERSION}" -o "dist/release/aria2mx-${GOOS}-${GOARCH}" ./cmd/aria2mx
   artifacts:
     name: "aria2mx-${GOOS}-${GOARCH}-${CI_COMMIT_SHORT_SHA}"
     paths:

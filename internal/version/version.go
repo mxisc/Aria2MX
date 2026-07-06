@@ -1,3 +1,3 @@
 package version
 
-var PanelVersion = "0.0.0"
+var PanelVersion = "1.0.0"

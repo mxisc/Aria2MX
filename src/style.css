@@ -1366,6 +1366,17 @@ button:disabled {
   min-height: 0;
 }
 
+.recent-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.queue-panel {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
 .queue-toolbar,
 .bulk-actions {
   display: grid;
@@ -1491,7 +1502,14 @@ button:disabled {
 }
 
 .recent-panel .task-list {
-  height: calc(100% - 56px);
+  height: auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.queue-panel > .task-list {
+  min-height: 0;
+  overflow: auto;
 }
 
 .task-row {
@@ -1501,6 +1519,7 @@ button:disabled {
   padding: 16px 18px;
   text-align: left;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 16px;
   border: 1px solid var(--soft-line);
   border-radius: 8px;
@@ -1522,7 +1541,6 @@ button:disabled {
 .status-dot {
   width: 10px;
   height: 10px;
-  margin-top: 7px;
   border-radius: 999px;
   background: var(--soft);
 }
@@ -1541,6 +1559,9 @@ button:disabled {
 }
 
 .task-main {
+  display: grid;
+  align-content: center;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1562,21 +1583,16 @@ button:disabled {
 }
 
 .task-meta {
-  margin: 4px 0 10px;
+  margin: 0;
   font-size: 12px;
 }
 
 .task-row.compact .task-meta {
-  margin: 2px 0 8px;
+  margin: 0;
 }
 
 .task-error {
-  margin-top: -6px;
   color: var(--danger);
-}
-
-.task-row.compact .task-error {
-  margin-top: -2px;
 }
 
 .task-row.compact .progress-track {
