@@ -1,0 +1,35 @@
+AI_PROJECT.md
+  s_07eae13fbb6f33::t_5cc12e00cfbc57 83
+  s_07eae13fbb6f33::t_fb357f5143fe6b 84-85
+src/style.css
+  s_07eae13fbb6f33::t_0dc4e10589a2c5 1370,1374-1379
+  s_07eae13fbb6f33::t_d707cfe53b5ef4 1369
+  s_07eae13fbb6f33::t_872553bdd46f02 1371-1373
+  s_61dd6b556ed5c4::t_1c0862ec832f94 1505-1512,1522,1562-1564,1586,1591
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "e91dbbd004c2d4173e0442d4118b104f165e556b",
+  "prompts": {},
+  "sessions": {
+    "s_07eae13fbb6f33": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a38b1b820129ce851db7c0c",
+        "model": "gpt-5.4__dev"
+      },
+      "human_author": "mxin.m <admin@mxin.moe>"
+    },
+    "s_61dd6b556ed5c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2213-4f0c-7c82-95ad-fc71e766eadb",
+        "model": "unknown"
+      },
+      "human_author": "mxin.m <admin@mxin.moe>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
