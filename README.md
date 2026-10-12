@@ -56,9 +56,9 @@ dist/aria2mx
 pnpm run prepare:aria2:all
 ```
 
-## GitLab CI 发布
+## GitHub Actions 发布
 
-仓库内提供了 `.gitlab-ci.yml`，会按矩阵分别构建：
+仓库内提供了 `.github/workflows/release.yml`，会按矩阵分别构建：
 
 - `linux-amd64`
 - `linux-arm64`
@@ -66,9 +66,9 @@ pnpm run prepare:aria2:all
 
 每个 CI 产物都只内嵌自身平台所需的 aria2 运行时，因此发布包不会再出现一个 `93M` 的“全平台合体版”。
 
-CI 会固定安装 `pnpm@10.14.0`，避免 Debian Bookworm 默认 Node.js 18 环境被最新版 pnpm 的 Node 版本要求卡住。
+CI 使用 Node.js 22 和 `pnpm@10.14.0`。
 
-推送 tag 时，CI 会在矩阵构建成功后把三个平台的二进制上传到 GitLab Generic Package Registry，然后创建 GitLab Release，并把永久 package 下载链接挂到 Release assets。
+推送 `v*` tag 后，CI 将三个平台的二进制发布到 GitHub Releases。
 
 ## 运行
 
